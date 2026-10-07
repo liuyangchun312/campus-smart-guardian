@@ -1,0 +1,6 @@
+{
+  "name": "campus-smart-guardian",
+  "compatibility_date": "2026-10-07",
+  "pages_build_output_dir": "../../dist",
+  "services": [{ "binding": "CAMPUS", "service": "campus-smart-guardian" }]
+}

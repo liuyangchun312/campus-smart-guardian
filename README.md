@@ -6,6 +6,10 @@
 
 线上地址：<https://campus-smart-guardian.campuscare.workers.dev>
 
+备用访问地址：<https://campus-smart-guardian.pages.dev>。Pages 提供同一前端，其 `/api/*` 通过服务绑定调用现有 Worker，共用账号和业务数据库。若当前网络无法访问 `workers.dev`，可使用此地址；更换域名后需重新登录。
+
+更新备用入口：先运行 `npm run build`，然后在 `cloudflare/pages` 目录运行 `npx wrangler@4.50.0 pages deploy ../../dist --project-name campus-smart-guardian --branch main`。此入口仍依赖现有 Worker，应保留其服务及 Durable Object。
+
 前端静态资源由 Cloudflare Workers Assets 提供，`/api/*` 由 Worker 转发给单个 Durable Object；账号、会话、工作记录和管理员保存的 AI 配置存储在该对象的持久化 SQLite 中。线上请求采用同源校验，登录 Cookie 包含 `Secure`、`HttpOnly` 和 `SameSite=Strict`。本机 `.guardian/` 数据不会自动迁移到线上。
 
 ```powershell
