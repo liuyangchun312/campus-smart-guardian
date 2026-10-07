@@ -1,0 +1,14 @@
+{
+  "name": "campus-smart-guardian",
+  "main": "cloudflare/worker.mjs",
+  "account_id": "179258bb54f4f5659b8b642861902a6e",
+  "compatibility_date": "2026-10-07",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "alias": { "node:sqlite": "./cloudflare/sqlite-shim.mjs" },
+  "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
+  "durable_objects": { "bindings": [{ "name": "GUARDIAN", "class_name": "Guardian" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Guardian"] }],
+  "observability": { "enabled": true }
+}

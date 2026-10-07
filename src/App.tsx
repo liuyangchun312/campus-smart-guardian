@@ -1,0 +1,646 @@
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import {
+  ArrowUpRight,
+  Activity,
+  Bell,
+  BookOpen,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  CircleHelp,
+  ClipboardList,
+  Heart,
+  HeartHandshake,
+  LayoutDashboard,
+  Menu,
+  PlugZap,
+  MessageCircle,
+  Sprout,
+  ShieldCheck,
+  Search,
+  FlaskConical,
+  Type,
+  Wrench,
+  X,
+} from "lucide-react";
+import Home from "./components/Home";
+import Tools from "./components/Tools";
+import AiSettings from "./components/AiSettings";
+import SessionGate from "./components/SessionGate";
+import AccountPanel from "./components/AccountPanel";
+import { api, apiFetch, ApiError, type Account } from "./lib/api";
+import { ThemeControl } from "./lib/theme";
+import { useAccountWorkspace, type WorkspaceSnapshot } from "./lib/workspace";
+import { isInspections, type Inspection } from "./lib/safety";
+import { knowledgeSources, retrieveEvidence } from "../shared/knowledge.mjs";
+import type { EvidenceSource } from "../shared/knowledge.mjs";
+import { getLocalReply } from "./lib/advisor";
+import { useStoredState } from "./lib/storage";
+import type { Message, OrderStatus, Page, WorkOrder } from "./types";
+
+const Chat = lazy(() => import("./components/Chat"));
+const Repair = lazy(() => import("./components/Repair"));
+const Orders = lazy(() => import("./components/Orders"));
+const Library = lazy(() => import("./components/Library"));
+const Operations = lazy(() => import("./components/Operations"));
+const Safety = lazy(() => import("./components/Safety"));
+const Knowledge = lazy(() => import("./components/Knowledge"));
+const Research = lazy(() => import("./components/Research"));
+const Admin = lazy(() => import("./components/Admin"));
+
+const navItems = [
+  { id: "home", label: "工作总览", icon: LayoutDashboard },
+  { id: "operations", label: "运行看板", icon: Activity },
+  { id: "safety", label: "安全巡检", icon: ShieldCheck },
+  { id: "chat", label: "智能咨询", icon: MessageCircle },
+  { id: "repair", label: "后勤报修", icon: Wrench },
+  { id: "library", label: "权益资料库", icon: BookOpen },
+  { id: "orders", label: "我的工单", icon: ClipboardList },
+  { id: "knowledge", label: "循证检索", icon: Search },
+  { id: "research", label: "方法与文献", icon: FlaskConical },
+  { id: "admin", label: "管理控制台", icon: ShieldCheck },
+] as const;
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+const isEvidenceSources = (value: unknown): value is EvidenceSource[] =>
+  Array.isArray(value) && value.length <= 10 && value.every((item) =>
+    isRecord(item) && ["id", "title", "source", "url", "excerpt", "applicability"].every((key) => typeof item[key] === "string") &&
+    knowledgeSources.some((source) => source.id === item.id && source.url === item.url),
+  );
+const isMessages = (value: unknown): value is Message[] =>
+  Array.isArray(value) &&
+  value.length <= 100 &&
+  value.every(
+    (item) =>
+      isRecord(item) &&
+      typeof item.id === "string" &&
+      ["user", "assistant"].includes(String(item.role)) &&
+      typeof item.content === "string" &&
+      (item.sources === undefined || isEvidenceSources(item.sources)),
+  );
+const isOrders = (value: unknown): value is WorkOrder[] =>
+  Array.isArray(value) &&
+  value.length <= 1000 &&
+  value.every(
+    (item) =>
+      isRecord(item) &&
+      [
+        "id",
+        "category",
+        "location",
+        "description",
+        "safety",
+        "createdAt",
+      ].every((key) => typeof item[key] === "string") &&
+      Number.isFinite(Date.parse(String(item.createdAt))) &&
+      ["普通", "紧急", "特急"].includes(String(item.priority)) &&
+      ["draft", "submitted", "resolved"].includes(String(item.status)) &&
+      Array.isArray(item.history) &&
+      item.history.every(
+        (entry: unknown) =>
+          isRecord(entry) &&
+          ["draft", "submitted", "resolved"].includes(String(entry.status)) &&
+          typeof entry.at === "string" &&
+          Number.isFinite(Date.parse(entry.at)),
+      ),
+  );
+const isBoolean = (value: unknown): value is boolean =>
+  typeof value === "boolean";
+const getPage = (): Page => {
+  const id = window.location.hash.slice(1);
+  return navItems.some((item) => item.id === id) ? (id as Page) : "home";
+};
+
+export default function App() {
+  return <SessionGate>{(user, initial, exit) => <WorkspaceApp key={user.id} user={user} initial={initial} onExit={exit} />}</SessionGate>;
+}
+
+function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: WorkspaceSnapshot; onExit: () => void }) {
+  const allowedPage = () => getPage() === "admin" && user.role !== "admin" ? "home" : getPage();
+  const [page, setPage] = useState<Page>(allowedPage);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const workspace = useAccountWorkspace(initial);
+  const { messages, orders, inspections } = workspace.data;
+  const setMessages = (next: Message[] | ((previous: Message[]) => Message[])) => workspace.update("messages", next);
+  const setOrders = (next: WorkOrder[] | ((previous: WorkOrder[]) => WorkOrder[])) => workspace.update("orders", next);
+  const setInspections = (next: Inspection[] | ((previous: Inspection[]) => Inspection[])) => workspace.update("inspections", next);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [tool, setTool] = useState<string | null>(null);
+  const [mode, setMode] = useState<"local" | "ai">("local");
+  const [aiModel, setAiModel] = useState("");
+  const [aiSettingsOpen, setAiSettingsOpen] = useState(
+    () => user.role === "admin" && new URLSearchParams(window.location.search).get("setup") === "ai",
+  );
+  const [largeType, setLargeType] = useStoredState<boolean>(
+    `guardian:${user.id}:large-type:v1`,
+    false,
+    isBoolean,
+  );
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState("");
+  const busyRef = useRef(false);
+  const toastTimer = useRef<number | undefined>(undefined);
+  const draftCount = orders.filter((order) => order.status === "draft").length;
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 4000);
+    apiFetch("/api/health", { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.mode === "ai") {
+          setMode("ai");
+          setAiModel(data.model || "");
+        }
+      })
+      .catch(() => {})
+      .finally(() => window.clearTimeout(timer));
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, []);
+  useEffect(() => {
+    const changed = () => {
+      setPage(allowedPage());
+      setMenuOpen(false);
+      window.scrollTo({ top: 0 });
+    };
+    window.addEventListener("hashchange", changed);
+    return () => window.removeEventListener("hashchange", changed);
+  }, []);
+  useEffect(() => {
+    document.documentElement.classList.toggle("large-type", largeType);
+  }, [largeType]);
+  useEffect(() => {
+    document.title = `${navItems.find((item) => item.id === page)?.label} · 校园智护`;
+  }, [page]);
+  useEffect(() => () => window.clearTimeout(toastTimer.current), []);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const sidebar = document.querySelector<HTMLElement>(".sidebar");
+    const previous = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const controls = Array.from(
+      sidebar?.querySelectorAll<HTMLElement>(
+        "button:not(:disabled), a[href]",
+      ) ?? [],
+    ).filter((element) => getComputedStyle(element).display !== "none");
+    controls[0]?.focus();
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key === "Tab" && controls.length) {
+        if (event.shiftKey && document.activeElement === controls[0]) {
+          event.preventDefault();
+          controls.at(-1)?.focus();
+        } else if (
+          !event.shiftKey &&
+          document.activeElement === controls.at(-1)
+        ) {
+          event.preventDefault();
+          controls[0]?.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", close);
+    return () => {
+      window.removeEventListener("keydown", close);
+      document.body.style.overflow = overflow;
+      previous?.focus();
+    };
+  }, [menuOpen]);
+  const notify = (value: string) => {
+    setToast(value);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(""), 4200);
+  };
+  const openAiSettings = () => {
+    if (user.role === "admin") setAiSettingsOpen(true);
+    else notify("AI 服务由管理员统一配置，请联系管理员启用或检查连接。");
+  };
+  const signOut = async () => {
+    if (busyRef.current) { notify("请等本次答复完成后退出，确保咨询记录完整保存。"); return; }
+    if (!(await workspace.flush())) { notify("还有记录未同步，请先导出备份或重试保存。"); return; }
+    try { await api("/api/auth/logout", {}); onExit(); }
+    catch (e) { if (e instanceof ApiError && e.status === 401) onExit(); else notify("退出失败，请检查本机服务后重试。"); }
+  };
+  const importLegacy = () => {
+    try {
+      const oldMessages: unknown = JSON.parse(localStorage.getItem("guardian:messages:v1") ?? "[]");
+      const oldOrders: unknown = JSON.parse(localStorage.getItem("guardian:orders:v1") ?? "[]");
+      const oldInspections: unknown = JSON.parse(localStorage.getItem("guardian:inspections:v1") ?? "[]");
+      if (!isMessages(oldMessages) || !isOrders(oldOrders) || !isInspections(oldInspections)) throw new Error("旧版记录格式不完整，请先导出或核对原始数据。");
+      if (!oldMessages.length && !oldOrders.length && !oldInspections.length) { notify("此浏览器没有可导入的旧版记录。"); return; }
+      const merge = <T extends { id: string }>(current: T[], legacy: T[]) => [...new Map([...legacy, ...current].map((item) => [item.id, item])).values()];
+      const next = { messages: merge(messages, oldMessages), orders: merge(orders, oldOrders), inspections: merge(inspections, oldInspections) };
+      if (!isMessages(next.messages) || !isOrders(next.orders) || !isInspections(next.inspections)) throw new Error("合并后记录超出容量，请先归档部分记录。");
+      setMessages(next.messages); setOrders(next.orders); setInspections(next.inspections);
+      notify("旧版记录已加入当前账号，正在同步；原始浏览器记录保留。");
+    } catch (e) { notify(e instanceof Error ? e.message : "无法读取旧版记录。"); }
+  };
+  const navigate = (next: Page) => {
+    if (next === "admin" && user.role !== "admin") return;
+    setPage(next);
+    window.location.hash = next;
+    setMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
+  const ask = async (input: string, identity?: Message["identity"]) => {
+    const text = input.trim().slice(0, 2100);
+    if (!text || busyRef.current) return;
+    busyRef.current = true;
+    setLoading(true);
+    navigate("chat");
+    const identityLabels = {
+      worker: "后勤劳动者",
+      student: "勤工助学学生",
+      other: "其他，具体用工关系待核实",
+    };
+    const contentWithIdentity = (message: {
+      content: string;
+      identity?: Message["identity"];
+    }) =>
+      message.identity
+        ? `【当前自选身份：${identityLabels[message.identity]}】\n${message.content}`
+        : message.content;
+    const history = messages
+      .slice(-10)
+      .map((message) => ({ role: message.role, content: message.content }));
+    const aiHistory = messages
+      .filter((message) => message.mode !== "error")
+      .slice(-10)
+      .map((message) => ({
+        role: message.role,
+        content: contentWithIdentity(message).slice(0, 2500),
+      }));
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: text,
+      identity,
+    };
+    setMessages((previous) => [...previous, userMessage].slice(-80));
+    const local = getLocalReply(text, history, identity);
+    let answer = local.text;
+    let answerMode: Message["mode"] = "local";
+    let sources = retrieveEvidence(text);
+    try {
+      if (mode === "ai") {
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), 50000);
+        try {
+          const response = await apiFetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: [
+                ...aiHistory,
+                { role: "user", content: contentWithIdentity(userMessage) },
+              ],
+            }),
+            signal: controller.signal,
+          });
+          const data: unknown = await response.json();
+          if (!response.ok)
+            throw new Error(
+              isRecord(data) && typeof data.error === "string"
+                ? data.error
+                : "AI 服务暂不可用，请检查连接设置。",
+            );
+          if (
+            !isRecord(data) ||
+            typeof data.text !== "string" ||
+            !data.text.trim()
+          )
+            throw new Error("Invalid response");
+          answer = data.text.slice(0, 40000);
+          sources = isEvidenceSources(data.sources)
+            ? data.sources.map((source) => knowledgeSources.find((known) => known.id === source.id)!).filter(Boolean)
+            : [];
+          answerMode = "ai";
+        } catch (error) {
+          answerMode = "error";
+          sources = [];
+          answer = `**这次未收到模型答复。**\n\n${controller.signal.aborted ? "模型响应超时，请稍后重试或更换模型。" : error instanceof Error && error.message !== "Failed to fetch" ? error.message : "无法连接本机服务，请检查服务是否运行。"}\n\n可以打开“AI 连接设置”检查令牌、额度、模型和接口协议，再重新发送问题。`;
+        } finally {
+          window.clearTimeout(timer);
+        }
+      } else await new Promise((resolve) => window.setTimeout(resolve, 420));
+      const reply: Message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: answer,
+        mode: answerMode,
+        ...(answerMode === "ai" ? { model: aiModel } : {}),
+        topic: local.topic,
+        sources,
+      };
+      setMessages((previous) => [...previous, reply].slice(-80));
+    } finally {
+      busyRef.current = false;
+      setLoading(false);
+    }
+  };
+  const reset = () => {
+    if (
+      !busyRef.current &&
+      window.confirm("开始新对话将清除当前浏览器里的咨询记录。确定继续吗？")
+    ) {
+      setMessages([]);
+      notify("已开始新对话");
+    }
+  };
+  const saveOrder = (order: WorkOrder) => {
+    setOrders((previous) => [order, ...previous].slice(0, 1000));
+    navigate("orders");
+    notify("工单已加入您的账号，请复制后通过学校正式渠道提交");
+  };
+  const updateOrder = (id: string, status: OrderStatus) => {
+    setOrders((previous) =>
+      previous.map((order) =>
+        order.id === id && order.status !== status
+          ? {
+              ...order,
+              status,
+              history: [
+                ...order.history,
+                { status, at: new Date().toISOString() },
+              ],
+            }
+          : order,
+      ),
+    );
+    notify("您的工单跟进状态已更新");
+  };
+
+  return (
+    <div className="app-shell">
+      <a
+        className="skip-link"
+        href="#main-content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById("main-content")?.focus();
+        }}
+      >
+        跳到主要内容
+      </a>
+      {menuOpen && (
+        <button
+          className="sidebar-scrim"
+          onClick={() => setMenuOpen(false)}
+          aria-label="关闭导航菜单"
+        />
+      )}
+      <aside className={`sidebar ${menuOpen ? "is-open" : ""}`}>
+        <button
+          className="brand"
+          onClick={() => navigate("home")}
+          aria-label="校园智护，返回首页"
+        >
+          <span className="brand-mark">
+            <Sprout size={29} strokeWidth={1.8} />
+          </span>
+          <span>
+            <strong>
+              校园智护<span>GUARDIAN</span>
+            </strong>
+            <small>让每一份劳动都被守护</small>
+          </span>
+        </button>
+        <button
+          className="mobile-menu-close icon-button"
+          aria-label="关闭菜单"
+          onClick={() => setMenuOpen(false)}
+        >
+          <X size={20} />
+        </button>
+        <div className="workspace-label">
+          <span className="campus-dot" />
+          <span>校园服务工作台</span>
+          <span className="workspace-pill">本地版</span>
+        </div>
+        <span className="nav-caption">服务与管理</span>
+        <nav aria-label="主导航">
+          {navItems.filter((item) => item.id !== "admin" || user.role === "admin").map((item) => (
+            <button
+              key={item.id}
+              className={`nav-item ${page === item.id ? "active" : ""}`}
+              aria-current={page === item.id ? "page" : undefined}
+              onClick={() => navigate(item.id)}
+            >
+              <item.icon size={19} strokeWidth={1.7} />
+              <span>{item.label}</span>
+              {item.id === "chat" ? (
+                <span className="ai-tag">AI</span>
+              ) : item.id === "orders" && draftCount > 0 ? (
+                <span className="nav-count">{draftCount}</span>
+              ) : page === item.id ? (
+                <span className="nav-active-dot" />
+              ) : null}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-tools">
+          <span className="nav-caption">实用帮助</span>
+          <button className="nav-item" onClick={() => setTool("help")}>
+            <HeartHandshake size={19} strokeWidth={1.7} />
+            <span>求助与联系</span>
+            <ArrowUpRight size={14} />
+          </button>
+          <button className="nav-item" onClick={() => setTool("about")}>
+            <CircleHelp size={19} strokeWidth={1.7} />
+            <span>认识小护</span>
+          </button>
+          {user.role === "admin" && <button
+            className="nav-item"
+            onClick={() => {
+              setMenuOpen(false);
+              setAiSettingsOpen(true);
+            }}
+          >
+            <PlugZap size={19} strokeWidth={1.7} />
+            <span>AI 连接设置</span>
+            {mode === "ai" && <span className="nav-active-dot" />}
+          </button>}
+        </div>
+        <div className="sidebar-bottom">
+          <div className="sidebar-care">
+            <span className="care-overline">
+              <Heart size={14} />
+              劳动不平凡
+            </span>
+            <strong>
+              守护每一个
+              <br />
+              认真生活的你。
+            </strong>
+            <div>
+              <span>您的付出，值得被看见</span>
+              <Sprout size={33} strokeWidth={1.2} />
+            </div>
+          </div>
+          <button className="visitor" onClick={() => { setMenuOpen(false); setAccountOpen(true); }}>
+            <span className="visitor-avatar">{user.name.slice(0, 1)}</span>
+            <span>
+              <strong>{user.name}</strong>
+              <small>{user.role === "admin" ? "管理员" : "普通用户"} · {workspace.status}</small>
+            </span>
+            <ChevronDown size={14} />
+          </button>
+        </div>
+      </aside>
+      <div className="main-shell">
+        <header className="topbar">
+          <div className="breadcrumb">
+            <button
+              className="icon-button mobile-menu"
+              aria-label="打开导航菜单"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen(true)}
+            >
+              <Menu size={22} />
+            </button>
+            <span>工作台</span>
+            <ChevronRight size={13} />
+            <strong>{navItems.find((item) => item.id === page)?.label}</strong>
+          </div>
+          <div className="topbar-actions">
+            <ThemeControl />
+            {user.role === "admin" && <button
+              className={`ai-connect-button ${mode === "ai" ? "connected" : ""}`}
+              onClick={() => setAiSettingsOpen(true)}
+              aria-label="打开 AI 连接设置"
+            >
+              <PlugZap size={15} />
+              {mode === "ai" ? "AI 已启用" : "连接 AI"}
+            </button>}
+            <span className="header-separator" />
+            <button
+              className={`type-toggle ${largeType ? "on" : ""}`}
+              onClick={() => setLargeType((previous) => !previous)}
+              aria-pressed={largeType}
+              aria-label="切换大字模式"
+            >
+              <Type size={18} />
+              <span>大字模式</span>
+            </button>
+            <button
+              className="notification-button icon-button"
+              aria-label="查看服务提醒"
+              onClick={() => setTool("notifications")}
+            >
+              <Bell size={19} />
+              {draftCount > 0 && <span />}
+            </button>
+            <button className="header-avatar" aria-label="打开我的账号" onClick={() => setAccountOpen(true)}>{user.name.slice(0, 1)}</button>
+          </div>
+        </header>
+        <main
+          id="main-content"
+          className={`main-content ${page === "chat" ? "chat-main" : ""}`}
+          tabIndex={-1}
+        >
+          {workspace.error && (
+            <div className="storage-warning" role="alert">
+              <p>{workspace.error}</p><div className="sync-actions"><button onClick={() => void workspace.flush()}>重试保存</button><button onClick={workspace.download}>导出本页备份</button><button onClick={() => { if (window.confirm("重新载入将丢弃本页未保存修改。请先导出备份。确定继续？")) window.location.reload(); }}>重新载入 / 登录</button></div>
+            </div>
+          )}
+          <Suspense fallback={<div className="page-loading" role="status">正在载入工作区…</div>}>
+          {page === "home" && (
+            <Home
+              navigate={navigate}
+              ask={(value) => void ask(value)}
+              openTool={setTool}
+              orders={orders}
+              inspections={inspections}
+            />
+          )}
+          {page === "operations" && <Operations orders={orders} inspections={inspections} navigate={navigate} />}
+          {page === "safety" && <Safety inspections={inspections} onChange={setInspections} notify={notify} />}
+          {page === "knowledge" && <Knowledge ask={(value) => void ask(value)} />}
+          {page === "research" && <Research navigate={navigate} notify={notify} />}
+          {page === "admin" && user.role === "admin" && <Admin onAiSettings={openAiSettings} />}
+          {page === "chat" && (
+            <Chat
+              messages={messages}
+              loading={loading}
+              mode={mode}
+              model={aiModel}
+              onAiSettings={openAiSettings}
+              ask={(value, identity) => void ask(value, identity)}
+              reset={reset}
+              onRepair={() => navigate("repair")}
+            />
+          )}
+          {page === "repair" && (
+            <Repair onSave={saveOrder} onOrders={() => navigate("orders")} />
+          )}
+          {page === "orders" && (
+            <Orders
+              orders={orders}
+              onUpdate={updateOrder}
+              onDelete={(id) => {
+                setOrders((previous) =>
+                  previous.filter((order) => order.id !== id),
+                );
+                notify("本地工单已删除");
+              }}
+              onCreate={() => navigate("repair")}
+              notify={notify}
+            />
+          )}
+          {page === "library" && <Library ask={(value) => void ask(value)} />}
+          </Suspense>
+        </main>
+        <footer className="site-footer">
+          <span>
+            <Sprout size={14} />
+            科技有温度，劳动有尊严。
+          </span>
+          <div>
+            <span>校园后勤保障与劳动权益智能管家</span>
+            <i>·</i>
+            <button onClick={() => setTool("privacy")}>隐私与数据</button>
+          </div>
+          <p>校园服务场景演示 · 非校方官方服务渠道</p>
+        </footer>
+      </div>
+      {accountOpen && <AccountPanel user={user} onClose={() => setAccountOpen(false)} signOut={signOut} importLegacy={importLegacy} download={workspace.download} notify={notify} />}
+      {aiSettingsOpen && user.role === "admin" && (
+        <AiSettings
+          onClose={() => {
+            setAiSettingsOpen(false);
+            const url = new URL(window.location.href);
+            url.searchParams.delete("setup");
+            window.history.replaceState(null, "", url);
+          }}
+          onChange={(nextMode, model) => {
+            setMode(nextMode);
+            setAiModel(model);
+          }}
+        />
+      )}
+      {tool && !aiSettingsOpen && (
+        <Tools
+          key={tool}
+          tool={tool}
+          onClose={() => setTool(null)}
+          notify={notify}
+          draftCount={draftCount}
+        />
+      )}
+      {toast && (
+        <div className="toast" role="status">
+          <span>
+            <Check size={16} />
+          </span>
+          {toast}
+          <button onClick={() => setToast("")} aria-label="关闭提示">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,20 @@
+:root{--canvas:#f6f7f4;--surface-soft:#f0f3eb;--text-secondary:#73816e;color-scheme:light}
+:root[data-theme="dark"]{--canvas:#101b15;--surface-soft:#223329;--text-secondary:#aebeb0;--forest:#acd2b5;--forest-deep:#315b43;--ink:#e5ede5;--muted:#98ab9b;--line:#35493b;--paper:#19281f;--sage:#2a4030;color-scheme:dark}
+html,body{background:var(--canvas);color:var(--ink)}
+.theme-control{display:inline-flex;align-items:center;gap:6px;color:var(--text-secondary);border:1px solid var(--line);border-radius:7px;padding:5px 8px;background:var(--paper);height:34px;flex-shrink:0}
+.theme-control select{border:0;background:transparent;color:inherit;font-size:11px;max-width:90px;cursor:pointer;padding:0;line-height:1.5}
+.theme-control option{background:var(--paper);color:var(--ink)}
+[data-theme="dark"] .button.primary,[data-theme="dark"] .brand-mark,[data-theme="dark"] .send-message{background:#315b43;color:#edf3e4}
+[data-theme="dark"] .wb-actions .button.primary{background:#d7e4bd;color:#213f2d;border-color:#d7e4bd}
+[data-theme="dark"] .operations-page{--ops-ink:#e2eee1;--ops-muted:#a6b8a7;--ops-line:#35493b}
+[data-theme="dark"] .knowledge-page{--knowledge-ink:#e2eee1}
+[data-theme="dark"] .sidebar,[data-theme="dark"] .topbar{background:#14231b}
+[data-theme="dark"] .wb-ledger{background:#1b2b22}
+[data-theme="dark"] .panel{background:var(--paper)}
+[data-theme="dark"] .brand strong{color:#e7eee4}
+.account-form input:not([type="checkbox"]){background:var(--paper);color:var(--ink)}
+.auth-story h1 em{white-space:nowrap}
+.visitor>span:nth-child(2){min-width:0}.visitor strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:145px}
+.storage-warning{display:block}
+@media(max-width:600px){.topbar-actions{gap:9px!important}.topbar .type-toggle,.topbar .notification-button,.topbar .header-separator{display:none}.topbar .header-avatar{display:grid;width:28px;height:28px;place-items:center}.theme-control{padding:5px 6px}.theme-control select{font-size:10px;max-width:68px}.topbar .ai-connect-button{padding:7px;font-size:0;gap:0}.topbar .breadcrumb{min-width:0;font-size:11px}.topbar .breadcrumb>strong{white-space:nowrap}.topbar .breadcrumb>span{display:none}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}

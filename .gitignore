@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+output/
+.playwright-cli/
+*.log
+*.tsbuildinfo
+.guardian/
+.wrangler/
+.dev.vars
+.dev.vars.*
