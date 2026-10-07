@@ -4,7 +4,7 @@
 
 ## Cloudflare 部署
 
-线上地址：<https://campus-smart-guardian.liuyangchun77.workers.dev>
+线上地址：<https://campus-smart-guardian.campuscare.workers.dev>
 
 前端静态资源由 Cloudflare Workers Assets 提供，`/api/*` 由 Worker 转发给单个 Durable Object；账号、会话、工作记录和管理员保存的 AI 配置存储在该对象的持久化 SQLite 中。线上请求采用同源校验，登录 Cookie 包含 `Secure`、`HttpOnly` 和 `SameSite=Strict`。本机 `.guardian/` 数据不会自动迁移到线上。
 
