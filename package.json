@@ -9,7 +9,9 @@
     "dev:api": "node --env-file-if-exists=.env server/index.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "npm run build && npm run deploy:worker && npm run deploy:pages",
+    "deploy:worker": "wrangler deploy",
+    "deploy:pages": "npx --yes wrangler@4.50.0 --cwd cloudflare/pages pages deploy ../../dist --project-name campus-smart-guardian --branch main",
     "dev:cloudflare": "npm run build && wrangler dev",
     "test": "vitest run src && node --test server/*.test.mjs"
   },

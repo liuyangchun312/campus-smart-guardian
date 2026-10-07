@@ -2,32 +2,66 @@
 
 面向保洁、宿管、维修、绿化、食堂员工及勤工助学学生的校园服务工作台。使用 React 19、TypeScript、Vite 和 Node.js，提供带来源的咨询、安全巡检与整改闭环、报修台账及运行分析。
 
+## 在线体验
+
+**推荐入口：[打开校园智护](https://campus-smart-guardian.pages.dev)**
+
+| 入口 | 地址 | 说明 |
+| --- | --- | --- |
+| Pages | <https://campus-smart-guardian.pages.dev> | 已验证首页、登录和业务接口，推荐使用 |
+| Workers | <https://campus-smart-guardian.campuscare.workers.dev> | 保留的直连入口，部分网络可能遇到 DNS 或 HTTPS 连接失败 |
+
+两个入口共用账号、密码、工单和巡检数据；Cookie 与浏览器偏好按域名保存，切换入口后需重新登录。原 `liuyangchun77.workers.dev` 地址已被账号子域名变更替换。
+
+这是支持本机运行及 Cloudflare 部署的场景演示，不代表天津工业大学或其他学校的官方平台，也未接入学校派单、物联网控制或救援系统。工单状态由使用者自行维护。
+
 ## Cloudflare 部署
 
-线上地址：<https://campus-smart-guardian.campuscare.workers.dev>
+Pages 提供前端静态资源，`/api/*` 由 Pages Functions 的 `CAMPUS` 服务绑定调用现有 Worker；Worker 转发给单个 `Guardian` Durable Object。账号、会话、工作记录和管理员保存的 AI 配置存储在该对象的持久化 SQLite 中。Worker 同时提供自己的静态资源入口。Pages 未创建第二套数据库，应保留现有 Worker 与 Durable Object。
 
-备用访问地址：<https://campus-smart-guardian.pages.dev>。Pages 提供同一前端，其 `/api/*` 通过服务绑定调用现有 Worker，共用账号和业务数据库。若当前网络无法访问 `workers.dev`，可使用此地址；更换域名后需重新登录。
+线上请求采用同源校验，登录 Cookie 包含 `Secure`、`HttpOnly` 和 `SameSite=Strict`。本机 `.guardian/` 数据不会自动迁移到线上。
 
-更新备用入口：先运行 `npm run build`，然后在 `cloudflare/pages` 目录运行 `npx wrangler@4.50.0 pages deploy ../../dist --project-name campus-smart-guardian --branch main`。此入口仍依赖现有 Worker，应保留其服务及 Durable Object。
+### 更新现有站点
 
-前端静态资源由 Cloudflare Workers Assets 提供，`/api/*` 由 Worker 转发给单个 Durable Object；账号、会话、工作记录和管理员保存的 AI 配置存储在该对象的持久化 SQLite 中。线上请求采用同源校验，登录 Cookie 包含 `Secure`、`HttpOnly` 和 `SameSite=Strict`。本机 `.guardian/` 数据不会自动迁移到线上。
+在项目根目录运行（Node.js 24）：
+
+```powershell
+npm ci
+npx wrangler login
+npm test
+npm run deploy
+```
+
+`npm run deploy` 先构建前端，再更新 Worker 后端和 Pages 前端。两个步骤必须均成功；Pages 失败时可运行 `npm run deploy:pages` 重试。仅更新 Worker 使用 `npm run deploy:worker`，仅发布已构建的 Pages 资源使用 `npm run deploy:pages`。GitHub 推送不会自动发布网站。
+
+Pages 发布脚本固定使用 Wrangler 4.50.0，以保留 `pages.dev` 入口；当前较新版本会将 Pages 命令迁移到 Workers 发布流程。该版本由 `npx` 从 npm 获取。发布脚本不会清空数据库或重新初始化管理员。
+
+### 首次部署到其他账号
+
+先修改根目录 `wrangler.jsonc` 的账号 ID 和 Worker 名称；若更改名称，也须同步 Pages 配置的 `name`、`services[].service` 及 `package.json` 中的 Pages 项目名。登录对应账号；多账号时设置 `CLOUDFLARE_ACCOUNT_ID`。Workers 子域名由账号配置决定，不在仓库中指定。
 
 ```powershell
 npm ci
 npx wrangler login
 npx wrangler secret put ADMIN_SETUP_CODE
+# 创建 Pages 项目；已存在的项目跳过这一步
+npx --yes wrangler@4.50.0 pages project create campus-smart-guardian --production-branch main
 npm run deploy
 ```
 
-`ADMIN_SETUP_CODE` 应设为独立的高强度随机值，首次进入管理员入口时用于初始化管理员；管理员存在后该码不能再次创建管理员。密钥通过 Cloudflare Secrets 设置，不要提交到 Git。`wrangler.jsonc` 包含当前部署账号 ID，部署到其他账号时需修改该字段。
+`ADMIN_SETUP_CODE` 应设为独立的高强度随机值，首次进入管理员入口时用于初始化管理员；管理员存在后该码不能再次创建管理员。密钥通过 Cloudflare Secrets 设置，不要提交到 Git。现有站点已完成管理员初始化，无需再次设置初始化码。
 
 本次部署的管理员凭据仅保存在本机忽略目录 `.guardian/cloudflare-admin.json`，首次登录后可通过账号菜单修改密码。AI 服务需在网站管理员界面配置和测试，未配置时使用本地规则问答。
 
-本地检查 Cloudflare 运行环境：`npm run dev:cloudflare`，再运行 `node cloudflare/smoke.mjs`。Smoke 检查会创建两个测试账号，建议仅用于本地环境。更新线上版本运行 `npm run deploy`；GitHub 推送不会自动发布。
+### 验证与访问排查
+
+本地检查 Cloudflare 运行环境：`npm run dev:cloudflare`，另一个终端运行 `node cloudflare/smoke.mjs`。Smoke 检查会创建两个测试账号，仅用于本地测试环境。
+
+线上可检查 `/api/health`（应返回 JSON）和 `/api/auth/session`（未登录应返回 `user: null`），再从页面登录验证业务数据。`workers.dev` 出现 DNS、SSL 或连接关闭错误时，先使用 Pages 入口，比较不同网络的结果；这些连接错误不代表账号数据丢失，重复部署不保证修复网络问题。不要关闭 HTTPS 证书校验。
+
+Cloudflare 免费子域名不收域名续费，但 Workers、Pages Functions、Durable Objects 与数据库遵循账号套餐额度；付费套餐超额可能计费。AI 服务由模型服务商另行计费，未配置 AI 仍可使用规则问答和业务功能。最新额度见 [Workers 定价](https://developers.cloudflare.com/workers/platform/pricing/) 与 [Durable Objects 定价](https://developers.cloudflare.com/durable-objects/platform/pricing/)。
 
 当前所有账号由单个 Durable Object 处理，适用于小规模演示。正式高并发运行前应评估账号分片、持久化登录限流、备份与恢复，以及邮箱验证和找回密码。部署遵循 Cloudflare 账号当前套餐和用量限制。
-
-这是支持本机运行及 Cloudflare 部署的场景演示，不代表天津工业大学或其他学校的官方平台，也未接入学校派单、物联网控制或救援系统。工单状态由使用者自行维护。
 
 ## 本地启动
 
@@ -48,12 +82,12 @@ npm run dev
 打开页面后，可选择 **用户入口** 或 **管理员入口**。
 
 - 普通用户：点击“注册用户账号”，设置账号、昵称与至少10个字符的密码；注册后自动进入工作台。账号使用3–32位字母、数字或下划线，不区分大小写。
-- 首位管理员：启动API后，在项目 `.guardian/admin-setup-code.txt` 中读取一次性初始化码；进入“管理员入口 → 初始化管理员”，填写初始化码和自定账号密码。初始化码使用后失效并删除，没有通用默认密码。普通注册不能获得管理员权限。
+- 首位管理员：本机版启动API后读取 `.guardian/admin-setup-code.txt`；云端版使用部署时设置的 `ADMIN_SETUP_CODE`。进入“管理员入口 → 初始化管理员”，填写初始化码和自定账号密码。管理员存在后初始化码不能再次创建管理员，本机初始化码文件会删除，没有通用默认密码。普通注册不能获得管理员权限。
 - 管理员：通过独立入口登录，使用“管理控制台”搜索用户、查看账号状态和工单/巡检数量、停用或重新启用普通账号，并配置全站AI服务。停用立即撤销该用户已有会话；管理员账号不可从此界面停用。
 - 所有账号：点击右上角头像或侧栏姓名，修改密码、退出登录、导出记录或导入旧版浏览器数据。修改密码会撤销其他会话；退出前会等待尚未完成的记录同步。旧数据不会自动归属第一个注册者，需使用者主动确认归属并导入，同编号保留账号已有记录。
 - 主题：登录页和工作台右上角提供“浅色 / 深色 / 跟随系统”。偏好保存在当前浏览器，刷新、登录和退出后保持；跟随系统会响应系统外观变化。
 
-账号、密码派生值、会话摘要和各账号工作记录保存在 `.guardian/guardian.sqlite`（SQLite，运行时还可能存在 `-wal`、`-shm` 文件）；整个 `.guardian/` 已忽略。密码使用独立随机盐和scrypt派生值保存，不保存明文；会话使用12小时有效的随机HttpOnly、SameSite=Strict Cookie，服务端只存令牌摘要。登录失败有频率限制，权限与记录所属账号由服务端检查，不能通过改网页角色字段越权。
+本机版账号、密码派生值、会话摘要和各账号工作记录保存在 `.guardian/guardian.sqlite`（SQLite，运行时还可能存在 `-wal`、`-shm` 文件）；整个 `.guardian/` 已忽略。云端版对应数据保存在 Durable Object SQLite。密码使用独立随机盐和scrypt派生值保存，不保存明文；会话使用12小时有效的随机HttpOnly、SameSite=Strict Cookie，服务端只存令牌摘要。登录失败有频率限制，权限与记录所属账号由服务端检查，不能通过改网页角色字段越权。
 
 账号数据在本机版保存到本机服务，在 Cloudflare 版保存到 Durable Object；多窗口编辑使用版本号，冲突或保存失败会明确提示并提供导出与重新载入。本机版不要在服务运行时仅复制SQLite主文件作为备份；停止服务后备份整个 `.guardian` 目录。本机SQLite数据库和AI密钥文件未做静态加密。本机版仍仅监听 `127.0.0.1`，尚未提供邮箱验证或找回密码流程。
 
@@ -114,13 +148,15 @@ npm run dev
 
 参考：[站点接入文档](https://ahhilai.top/docs#protocol)、[模型广场](https://ahhilai.top/pricing)。模型名称和分组核对日期：2026-10-01。
 
-密钥保存在项目的 `.guardian/ai-config.json` 中，由本机 Node 后端读取，不写入浏览器存储、不回显到网页。该目录已加入 `.gitignore`。文件本身未加密，请按本机凭据保护，勿上传或分享。网页保存的设置优先于环境变量。点击“停用 AI 连接”会清除网页保存的令牌，并持久保持停用状态。
+本机版密钥保存在 `.guardian/ai-config.json` 中，由 Node 后端读取；云端版管理员保存的配置保存在 Durable Object SQLite 中。密钥不写入浏览器存储、不回显到网页。`.guardian/` 已加入 `.gitignore`，本机密钥文件未加密，请勿上传或分享。网页保存的设置优先于环境变量。点击“停用 AI 连接”会清除网页保存的令牌，并持久保持停用状态。
 
-启用后，问题与最近对话会经本机后端发送给配置的中转站。请求失败时显示错误及设置入口，不会用预设指引代替模型答复。未接通时，页面清楚标识为本地参考问答。
+启用后，问题与最近对话会经当前部署的后端发送给配置的中转站。请求失败时显示错误及设置入口，不会用预设指引代替模型答复。未接通时，页面清楚标识为本地参考问答。
 
 模型接口行为通过本地模拟服务验证；本次升级没有用真实站点令牌发起模型请求。真实连接状态与模型可用性以设置窗口的连接测试为准。
 
 ### 也可手动配置环境变量
+
+以下 `.env` 方法用于本机版。云端版 AI 密钥可用 `npx wrangler secret put AI_API_KEY` 设置，非敏感的 `AI_BASE_URL`、`AI_MODEL`、`AI_PROTOCOL` 可配置在根目录 `wrangler.jsonc` 的 `vars` 中，然后重新部署 Worker。推荐通过网站管理员界面配置并测试。
 
 复制配置模板：
 
@@ -139,13 +175,13 @@ AI_PROTOCOL=chat
 
 环境变量在服务启动时读取；手动修改后重启服务并刷新页面。`AI_PROTOCOL=chat` 请求 `/chat/completions`，`AI_PROTOCOL=responses` 请求 `/responses`。配置窗口可以测试环境变量中的密钥，测试时密钥栏留空即可。服务地址使用 HTTPS，本机模型服务可使用 `http://127.0.0.1:端口/v1`。
 
-密钥仅由 Node 服务读取，不得使用 `VITE_` 前缀，也不要放入前端代码或提交 `.env`。仓库已忽略 `.env`。启用 AI 后，当前问题与最近对话会经本机服务发送到配置的服务商；无需提交身份证号、银行卡号等敏感资料。
+密钥仅由后端读取，不得使用 `VITE_` 前缀，也不要放入前端代码或提交 `.env`。仓库已忽略 `.env`。启用 AI 后，当前问题与最近对话会经后端发送到配置的服务商；无需提交身份证号、银行卡号等敏感资料。
 
-手动配置的环境变量会标为“尚未测试”；一次成功测试也不保证后续额度或上游服务始终可用。项目未进行生产部署。
+手动配置的环境变量会标为“尚未测试”；一次成功测试也不保证后续额度或上游服务始终可用。项目已部署云端演示，尚未完成生产负载评估。
 
 ## 数据与边界
 
-对话、工单、巡检与整改记录按账号保存在本机SQLite数据库。清除浏览器站点数据或退出登录不会删除数据库中的账号记录；主题与大字偏好仍是浏览器设置。旧版浏览器数据保留，可在账号菜单确认归属后导入。咨询页“新对话”会清除当前账号对话，工单详情可删除当前账号单张工单。巡检Markdown、看板CSV与账号JSON导出适合归档查看，尚无文件恢复界面。账号隔离与管理权限已实现，尚未对接校方派单或校内统一认证。
+对话、工单、巡检与整改记录按账号保存在当前部署的SQLite数据库：本机文件或云端 Durable Object。清除浏览器站点数据或退出登录不会删除数据库中的账号记录；主题与大字偏好仍是浏览器设置。旧版浏览器数据保留，可在账号菜单确认归属后导入。咨询页“新对话”会清除当前账号对话，工单详情可删除当前账号单张工单。巡检Markdown、看板CSV与账号JSON导出适合归档查看，尚无文件恢复界面。账号隔离与管理权限已实现，尚未对接校方派单或校内统一认证。
 
 报修单只是本地草稿，复制后仍需通过学校正式渠道提交。“已自行提交”“已标记解决”是使用者记录，不是校方回执。遇到火情、漏电、化学品刺激或其他人身危险，应先避险并联系现场人员或应急服务。
 
@@ -158,7 +194,9 @@ npm run build
 
 测试覆盖咨询规则、报修风险分类、中文检索与无匹配场景、来源上下文、风险分级与状态流转、统计日期边界与CSV安全，以及模型连接、两种接口协议、设置持久化、鉴权错误与密钥保护；构建执行 TypeScript 检查并生成 `dist/`。
 
-2026-10-02验收：60项前端业务单元测试与24项服务端/检索/账号测试通过（共84项）；生产构建通过，业务页面按需加载。账号测试覆盖注册越权、管理员一次性初始化与并发保护、数据隔离、过期/退出/停用撤销会话、密码更换、请求来源与限速、多窗口版本冲突及重启持久化。独立测试数据库与浏览器中实际验证了注册→保存工单→退出→重登、管理员启停账号、旧记录确认归属后导入、双窗口冲突提示，浅深色切换与系统外观跟随、全页面深色卡片和390px手机布局。原有巡检闭环、来源展开和CSV流程也有验证记录。操作脚本与截图保存在 `output/playwright/`，界面测试数据库在 `output/auth-ui/`，二者已忽略且不含真实业务数据。没有调用真实模型验证回答质量，也没有进行互联网部署或生产负载测试。
+2026-10-07验收：60项前端业务测试与25项服务端/检索/账号测试通过（共85项），生产构建通过。Cloudflare 本地端到端检查验证了注册、会话、Secure Cookie、账号隔离、工作记录版本冲突、退出与重新登录。Pages 线上入口验证了首页、健康检查、管理员登录、账号列表、工作记录读取及外站来源拒绝，现有账号数据在重新部署后保留。未用真实模型验证回答质量，未进行生产负载测试。
+
+2026-10-02本机界面验收：独立测试数据库与浏览器中验证了注册→保存工单→退出→重登、管理员启停账号、旧记录确认归属后导入、双窗口冲突提示，浅深色切换与系统外观跟随、全页面深色卡片和390px手机布局。原有巡检闭环、来源展开和CSV流程也有验证记录。操作脚本与截图保存在 `output/playwright/`，界面测试数据库在 `output/auth-ui/`，二者已忽略且不含真实业务数据。
 
 本机预览构建结果需要两个终端：
 
@@ -180,7 +218,11 @@ npm run preview
 - `src/lib/advisor.ts`、`src/lib/repair.ts`：本地咨询与报修分类规则。
 - `src/data/articles.ts`：权益与安全资料、官方来源。
 - `src/components/`：页面、工具和弹窗组件。
-- `server/index.mjs`、`server/app.mjs`：仅监听本机的 AI 代理、连接管理与请求校验。
+- `server/index.mjs`：仅监听本机的 Node API 启动入口。
+- `server/app.mjs`：本机与云端共用的 AI 代理、连接管理与请求校验。
+- `cloudflare/worker.mjs`、`wrangler.jsonc`：Worker 路由、Durable Object SQLite 适配与云端部署配置。
+- `cloudflare/pages/`：Pages 入口与调用现有 Worker 的服务绑定。
+- `cloudflare/smoke.mjs`、`server/cloud.test.mjs`：Cloudflare 本地端到端检查与云端存储适配测试。
 - `server/prompt.mjs`：校园管家的模型系统提示词。
 - `src/components/AiSettings.tsx`：模型连接设置与测试窗口。
 - `src/types.ts`：对话、工单及资料类型。
