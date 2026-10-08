@@ -206,7 +206,8 @@ test("malformed, empty and oversized model responses are rejected safely", async
     ["application/json", "null", /响应格式/],
     ["application/json", "mock-secret-must-not-leak", /响应格式/],
     ["text/event-stream", 'data: invalid-mock-secret\n\ndata: [DONE]\n\n', /事件流格式/],
-    ["text/event-stream", `data: ${"x".repeat(512 * 1024)}\n\n`, /内容过长/],
+    ["application/json", "x".repeat(512 * 1024 + 1), /内容过长/],
+    ["text/event-stream", `data: ${"x".repeat(4 * 1024 * 1024)}\n\n`, /内容过长/],
   ]) {
     f.rawResponse(type, body);
     const reply = await f.request("/api/chat", { messages: [{ role: "user", content: "你好" }] });
@@ -214,6 +215,18 @@ test("malformed, empty and oversized model responses are rejected safely", async
     assert.match(reply.body.error, message);
     assert.equal(JSON.stringify(reply.body).includes("mock-secret"), false);
   }
+});
+
+test("Responses streams allow normal event framing beyond the JSON body limit", async (t) => {
+  const f = await fixture(t);
+  const deltas = Array.from({ length: 3000 }, (_, i) => `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", sequence_number: i, item_id: "msg_123456789012345678901234567890", output_index: 0, content_index: 0, delta: "hello", logprobs: [] })}\n\n`).join("");
+  const completed = `event: response.completed\ndata: ${JSON.stringify({ type: "response.completed", response: { output: [{ type: "message", content: [{ type: "output_text", text: "hello".repeat(3000) }] }] } })}\n\n`;
+  assert.ok(Buffer.byteLength(deltas) > 512 * 1024);
+  f.rawResponse("text/event-stream", deltas + completed);
+  assert.equal((await f.request("/api/ai/connect", { ...f.config, protocol: "responses" })).status, 200);
+  const reply = await f.request("/api/chat", { messages: [{ role: "user", content: "你好" }] });
+  assert.equal(reply.status, 200);
+  assert.equal(reply.body.text, "hello".repeat(3000));
 });
 
 test("backup connection is tested, private, persistent and used on primary permission failure", async (t) => {

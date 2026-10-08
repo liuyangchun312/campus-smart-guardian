@@ -155,13 +155,15 @@ async function readResponse(response, responses) {
   const reader = response.body?.getReader();
   if (!reader) throw new HttpError(502, "模型服务未返回内容。");
   let size = 0;
+  // Per-token SSE envelopes are much larger than the equivalent final JSON answer.
+  const limit = response.headers.get("content-type")?.toLowerCase().includes("text/event-stream") ? 4 * 1024 * 1024 : 512 * 1024;
   const chunks = [];
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 512 * 1024) throw new HttpError(502, "模型服务返回内容过长。");
+      if (size > limit) throw new HttpError(502, "模型服务返回内容过长。");
       chunks.push(Buffer.from(value));
     }
   } finally {
