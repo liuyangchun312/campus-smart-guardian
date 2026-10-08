@@ -1,3 +1,30 @@
+import type { WorkOrder } from "../types";
+
+export type RepairDraft = { description: string; location: string; category: string; priority: WorkOrder["priority"] };
+export const emptyRepairDraft: RepairDraft = { description: "", location: "", category: "水电与暖通", priority: "普通" };
+export type RepairErrors = Partial<Record<"description" | "location", string>>;
+
+export function validateRepairDraft(draft: Pick<RepairDraft, "description" | "location">): RepairErrors {
+  const errors: RepairErrors = {};
+  const description = draft.description.trim();
+  const location = draft.location.trim();
+  if (description.length < 8) errors.description = "请描述具体故障，去除首尾空格后至少 8 个字。";
+  else if (description.length > 1500) errors.description = "故障描述不能超过 1500 个字。";
+  if (location.length < 4) errors.location = "请补充楼栋或房号，去除首尾空格后至少 4 个字。";
+  else if (location.length > 120) errors.location = "发生地点不能超过 120 个字。";
+  return errors;
+}
+
+export function extractRepairLocation(description: string): string {
+  const number = "[A-Za-z\\d一二三四五六七八九十百]+";
+  const separator = "[\\s，,·-]*";
+  const district = `(?:(?:[东西南北中][\\p{Script=Han}\\d ]{0,8}?(?:校区|区)|[\\p{Script=Han}\\d ]{1,12}?校区)${separator})?`;
+  const building = `(?:(?:第?\\s*${number}\\s*号\\s*)?(?:宿舍楼|教学楼|办公楼|实验楼|图书馆|食堂)|${number}\\s*号\\s*楼)`;
+  const floor = `(?:${separator}第?\\s*${number}\\s*(?:楼|层))?`;
+  const room = `(?:${separator}(?:${number}\\s*(?:室|房|教室)|卫生间|洗手间|大厅|走廊|楼梯间))?`;
+  return description.match(new RegExp(`${district}${building}${floor}${room}`, "u"))?.[0].trim().replace(/^(?:我在|位于|发生在)\s*/, "") ?? "";
+}
+
 export function classifyRepair(description: string) {
   const active = (pattern: RegExp) =>
     [...description.matchAll(new RegExp(pattern.source, "g"))].some((match) => {

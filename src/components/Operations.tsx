@@ -4,6 +4,7 @@ import type { Page, WorkOrder } from "../types";
 import type { Inspection } from "../lib/safety";
 import { distribution, localDateKey, operationsCsv, pendingTasks, periodDescription, summarizeOperations } from "../lib/operations";
 import type { RecordPeriod } from "../lib/operations";
+import { useDeployment } from "../lib/deployment";
 import "./operations.css";
 
 const periodLabel: Record<RecordPeriod, string> = { "7": "近 7 天", "30": "近 30 天", all: "全部历史" };
@@ -28,12 +29,15 @@ function Distribution({ rows, priority = false }: { rows: ReturnType<typeof dist
   </div>;
 }
 
-export default function Operations({ orders, inspections, navigate }: {
+export default function Operations({ orders, inspections, navigate, openRecord, period, onPeriodChange }: {
   orders: WorkOrder[];
   inspections: Inspection[];
   navigate: (page: Page) => void;
+  openRecord: (type: "order" | "inspection", id: string) => void;
+  period: RecordPeriod;
+  onPeriodChange: (period: RecordPeriod) => void;
 }) {
-  const [period, setPeriod] = useState<RecordPeriod>("30");
+  const { storageLabel } = useDeployment();
   const [now, setNow] = useState(() => new Date());
   const [exportStatus, setExportStatus] = useState("");
   useEffect(() => {
@@ -76,7 +80,7 @@ export default function Operations({ orders, inspections, navigate }: {
         <button className="button primary small" onClick={() => navigate("safety")}><Plus size={15} />开展安全巡检</button>
       </div>
     </header>
-    <div className="ops-local-note"><ShieldCheck size={17} /><p>仅统计当前账号保存的真实记录；工单状态由您更新，整改闭环以本地复核记录为依据。快照：{snapshot}（{timezone}）。</p></div>
+    <div className="ops-local-note"><ShieldCheck size={17} /><p>{storageLabel}；仅统计当前账号保存的真实记录。工单状态由您更新，整改闭环以保存的复核记录为依据。快照：{snapshot}（{timezone}）。</p></div>
 
     <section aria-labelledby="ops-overview-title">
       <div className="ops-section-caption"><i className="ops-live-dot" aria-hidden="true" /><h2 id="ops-overview-title">当前跟进概览</h2><span>待办不限创建日期 · 解决率使用下方筛选范围</span></div>
@@ -94,8 +98,8 @@ export default function Operations({ orders, inspections, navigate }: {
     </section>}
 
     <section aria-labelledby="ops-cohort-title">
-      <div className="ops-toolbar"><div><h2 id="ops-cohort-title">记录分析</h2><p>按创建时间筛选：{periodDescription(period, now)}。图表与 CSV 使用同一范围。</p></div><div className="ops-period" role="group" aria-label="按记录创建日期筛选">{(["7", "30", "all"] as RecordPeriod[]).map((value) => <button key={value} aria-pressed={period === value} onClick={() => { setPeriod(value); setExportStatus(""); }}>{periodLabel[value]}</button>)}</div></div>
-      {hasRecords && !scopeCount && <div className="ops-scope-empty"><span>所选创建范围内暂无记录；历史待办仍显示在下方。</span>{period !== "all" && <button onClick={() => setPeriod("all")}>查看全部历史</button>}</div>}
+      <div className="ops-toolbar"><div><h2 id="ops-cohort-title">记录分析</h2><p>按创建时间筛选：{periodDescription(period, now)}。图表与 CSV 使用同一范围。</p></div><div className="ops-period" role="group" aria-label="按记录创建日期筛选">{(["7", "30", "all"] as RecordPeriod[]).map((value) => <button key={value} aria-pressed={period === value} onClick={() => { onPeriodChange(value); setExportStatus(""); }}>{periodLabel[value]}</button>)}</div></div>
+      {hasRecords && !scopeCount && <div className="ops-scope-empty"><span>所选创建范围内暂无记录；历史待办仍显示在下方。</span>{period !== "all" && <button onClick={() => onPeriodChange("all")}>查看全部历史</button>}</div>}
       <div className="ops-panel ops-completion"><Completion title="报修工单 · 已标记解决" completed={summary.resolvedOrders} total={summary.scopedOrders.length} /><Completion title="安全巡检 · 已复核闭环" completed={summary.closedInspections} total={summary.scopedInspections.length} /></div>
       <div className="ops-distributions">
         <section className="ops-panel"><div className="ops-panel-title"><h3>工单类别分布</h3><span>当前范围 · {summary.scopedOrders.length} 条</span></div>{categories.length ? <Distribution rows={categories} /> : <div className="ops-chart-empty"><p><BarChart3 size={18} /> 暂无可统计的工单类别</p></div>}</section>
@@ -105,12 +109,12 @@ export default function Operations({ orders, inspections, navigate }: {
 
     <section className="ops-panel ops-queue" aria-labelledby="ops-queue-title"><div className="ops-panel-title"><h3 id="ops-queue-title">待跟进清单</h3><span>全部历史 · {tasks.length} 条</span></div>
       {tasks.length ? <>
-        {tasks.slice(0, 6).map((task) => <article className="ops-queue-item" key={task.key}>
+        {tasks.map((task) => <article className="ops-queue-item" key={task.key}>
           <span className={`ops-task-icon ${task.alert ? "is-alert" : ""}`}>{task.type === "order" ? <ClipboardList size={17} /> : <ShieldCheck size={17} />}</span>
           <div className="ops-task-content"><h4>{task.title}</h4><p><span>{task.location}</span><span>·</span><time dateTime={task.createdAt}>{new Date(task.createdAt).toLocaleDateString("zh-CN")}</time><span>{task.type === "order" ? "报修记录" : "安全巡检"}</span></p></div>
-          <span className={`ops-task-status ${task.alert ? "is-alert" : ""}`}>{task.label}</span><button onClick={() => navigate(task.type === "order" ? "orders" : "safety")} aria-label={`跟进${task.location}的${task.title}`}>跟进<ArrowRight size={14} /></button>
+          <span className={`ops-task-status ${task.alert ? "is-alert" : ""}`}>{task.label}</span><button onClick={() => openRecord(task.type, task.id)} aria-label={`跟进${task.location}的${task.title}`}>跟进<ArrowRight size={14} /></button>
         </article>)}
-        <p className="ops-queue-tail">优先显示特急工单与高优先风险，其次是逾期整改；同级按创建时间从早到晚排列。{tasks.length > 6 ? `此处展示前 6 条，其余记录可在工单或巡检页面查看。` : ""}</p>
+        <p className="ops-queue-tail">优先显示特急工单与高优先风险，其次是逾期整改；同级按创建时间从早到晚排列。</p>
       </> : <div className="ops-chart-empty"><p><Clock3 size={18} /> {hasRecords ? "当前没有未解决的工单或未闭环的巡检记录。" : "创建记录后，需要跟进的事项会出现在这里。"}</p></div>}
     </section>
 

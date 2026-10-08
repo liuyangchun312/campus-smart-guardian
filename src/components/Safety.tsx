@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, Check, CheckCheck, ChevronRight, ClipboardCheck, Clock3, Download, FlaskConical, Plus, Search, ShieldCheck, ShieldAlert, Sun, Zap } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CheckCheck, ChevronRight, ClipboardCheck, Clock3, Download, FlaskConical, Plus, Search, ShieldCheck, ShieldAlert, Sun, Zap } from "lucide-react";
 import { CONTROL_LEVELS, RATING_GUIDE, SAFETY_TEMPLATES, STATUS_LABELS, createInspection, getRisk, hasCriticalFailure, inspectionMarkdown, inspectionRisk, isOverdue, isRiskRatings, transitionInspection } from "../lib/safety";
 import type { ControlLevel, Inspection, InspectionAction, Remediation, RiskRatings, SafetyAnswer, SafetyTemplate } from "../lib/safety";
+import type { InspectionViewState } from "../lib/navigation";
+import { useDeployment } from "../lib/deployment";
 import "./safety.css";
 
-type Props = { inspections: Inspection[]; onChange: (next: Inspection[] | ((prev: Inspection[]) => Inspection[])) => void; notify: (message: string) => void };
+type Props = { inspections: Inspection[]; onChange: (next: Inspection[] | ((prev: Inspection[]) => Inspection[])) => void; notify: (message: string) => void; selectedId: string | null; onSelect: (id: string | null) => void; view: InspectionViewState; onViewChange: (view: InspectionViewState) => void };
 const ICONS = { cleaning: FlaskConical, electrical: Zap, heat: Sun };
 const formatTime = (at: string) => new Date(at).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
 
@@ -27,6 +29,7 @@ function RiskPanel({ ratings, critical, residual = false }: { ratings: RiskRatin
 }
 
 function InspectionForm({ onSave }: { onSave: (row: Inspection) => void }) {
+  const { storageLabel } = useDeployment();
   const [templateId, setTemplateId] = useState("cleaning");
   const [site, setSite] = useState("");
   const [inspector, setInspector] = useState("");
@@ -38,7 +41,7 @@ function InspectionForm({ onSave }: { onSave: (row: Inspection) => void }) {
   const checked = template.checks.filter(({ id }) => answers[id] === "passed" || answers[id] === "failed").length;
   const critical = hasCriticalFailure({ templateId, answers });
   return <form className="safety-work-card" onSubmit={(event) => { event.preventDefault(); try { onSave(createInspection({ templateId, site, inspector, notes, answers, ratings })); } catch (caught) { setError(caught instanceof Error ? caught.message : "登记失败，请检查表单。"); } }}>
-    <div className="safety-card-heading"><div><span className="safety-eyebrow">NEW INSPECTION</span><h2>从一次现场检查开始</h2></div><span className="safety-local-label">本机保存</span></div>
+    <div className="safety-card-heading"><div><span className="safety-eyebrow">NEW INSPECTION</span><h2>登记现场巡检</h2></div><span className="safety-local-label">{storageLabel}</span></div>
     <section className="safety-form-section"><h3><span>01</span>选择作业场景</h3><div className="safety-template-grid">{SAFETY_TEMPLATES.map((item) => {
       const Icon = ICONS[item.icon]; return <button key={item.id} type="button" className={`safety-template ${templateId === item.id ? "selected" : ""}`} aria-pressed={templateId === item.id} onClick={() => { setTemplateId(item.id); setAnswers({}); setRatings({ severity: 0, occurrence: 0, detection: 0 }); setError(""); }}><Icon size={22} /><strong>{item.name}</strong><small>{item.context}</small>{templateId === item.id && <Check size={15} className="safety-template-check" />}</button>;
     })}</div><div className="safety-field-grid"><label>检查地点 <em>*</em><input value={site} onChange={(event) => setSite(event.target.value)} placeholder="例如：北区教学楼一层保洁间" maxLength={120} required /></label><label>检查人 <em>*</em><input value={inspector} onChange={(event) => setInspector(event.target.value)} placeholder="填写现场检查人" maxLength={60} required /></label></div></section>
@@ -85,21 +88,35 @@ function InspectionDetail({ row, onAction, notify }: { row: Inspection; onAction
   </article>;
 }
 
-export default function Safety({ inspections, onChange, notify }: Props) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+export default function Safety({ inspections, onChange, notify, selectedId, onSelect, view, onViewChange }: Props) {
+  const { storageLabel } = useDeployment();
   const [formVersion, setFormVersion] = useState(0);
-  const [filter, setFilter] = useState("all");
-  const [search, setSearch] = useState("");
+  const { filter, search } = view;
   const selected = inspections.find(({ id }) => id === selectedId);
   const stats = useMemo(() => ({ open: inspections.filter(({ status }) => status !== "closed").length, high: inspections.filter((row) => row.status !== "closed" && inspectionRisk(row).level === "high").length, overdue: inspections.filter((row) => isOverdue(row)).length, closed: inspections.filter(({ status }) => status === "closed").length }), [inspections]);
-  const visible = inspections.filter((row) => (filter === "all" || filter === "open" && row.status !== "closed" || filter === "overdue" && isOverdue(row) || filter === "closed" && row.status === "closed") && [row.site, row.inspector, row.remediation?.owner ?? "", SAFETY_TEMPLATES.find(({ id }) => id === row.templateId)?.name ?? ""].join(" ").toLowerCase().includes(search.trim().toLowerCase())).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const visible = inspections.filter((row) => (filter === "all" || filter === "open" && row.status !== "closed" || filter === "overdue" && isOverdue(row) || filter === "review" && row.status === "review" || filter === "high" && row.status !== "closed" && inspectionRisk(row).level === "high" || filter === "closed" && row.status === "closed") && [row.site, row.inspector, row.remediation?.owner ?? "", SAFETY_TEMPLATES.find(({ id }) => id === row.templateId)?.name ?? ""].join(" ").toLowerCase().includes(search.trim().toLowerCase())).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const handleAction = (id: string, action: InspectionAction) => {
     const current = inspections.find((row) => row.id === id);
     if (!current) return;
     try { const next = transitionInspection(current, action); onChange((prev) => prev.map((row) => row.id === id ? next : row)); notify(action.type === "close" ? "复核通过，本次巡检已闭环" : action.type === "return" ? "已退回整改，原流转记录保留" : action.type === "review" ? "复核结论已保存，可继续确认闭环或退回整改" : "整改进展已保存"); } catch (caught) { notify(caught instanceof Error ? caught.message : "保存失败，请检查填写内容。"); }
   };
-  return <div className="safety-page"><header className="safety-page-header"><div><span className="safety-eyebrow">SAFETY / FIELD OPERATIONS</span><h1>把风险看见，把整改做完。</h1><p>巡检、风险排序、责任落实、效果复核，一条完整的安全工作记录。</p></div><button className="safety-primary" onClick={() => { setSelectedId(null); setFormVersion((value) => value + 1); }}><Plus size={17} />新建巡检</button></header>
-    <div className="safety-stats">{[{ label: "待处理记录", value: stats.open, icon: ClipboardCheck, caption: "从登记到复核" }, { label: "高优先风险", value: stats.high, icon: ShieldAlert, caption: "含严重后果优先规则" }, { label: "逾期未闭环", value: stats.overdue, icon: Clock3, caption: "按整改截止日期统计" }, { label: "已完成闭环", value: stats.closed, icon: ShieldCheck, caption: "措施有效性已复核" }].map(({ label, value, icon: Icon, caption }, index) => <div className={`safety-stat stat-${index}`} key={label}><span><Icon size={17} />{label}</span><strong>{value.toString().padStart(2, "0")}</strong><small>{caption}</small></div>)}</div>
-    <div className="safety-layout"><div className="safety-main">{selected ? <InspectionDetail key={`${selected.id}:${selected.status}`} row={selected} onAction={handleAction} notify={notify} /> : <InspectionForm key={formVersion} onSave={(row) => { onChange((prev) => [row, ...prev]); setSelectedId(row.id); notify("巡检已登记，请继续明确整改责任与措施"); }} />}</div><aside className="safety-records"><div className="safety-records-header"><div><span className="safety-eyebrow">INSPECTION REGISTER</span><h2>巡检台账 <span>{inspections.length}</span></h2></div><ClipboardCheck size={24} /></div><label className="safety-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索地点、人员、场景" aria-label="搜索巡检台账" /></label><div className="safety-filters" aria-label="筛选巡检记录">{[{ value: "all", label: "全部" }, { value: "open", label: "待处理" }, { value: "overdue", label: "逾期" }, { value: "closed", label: "已闭环" }].map(({ value, label }) => <button key={value} aria-pressed={filter === value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{label}</button>)}</div><div className="safety-record-list">{visible.length ? visible.map((row) => { const risk = inspectionRisk(row); const template = SAFETY_TEMPLATES.find(({ id }) => id === row.templateId) as SafetyTemplate; return <button key={row.id} onClick={() => setSelectedId(row.id)} className={`safety-record ${selectedId === row.id ? "selected" : ""}`}><span className="safety-record-top"><span className={`safety-risk-badge ${risk.level}`}>{risk.label} · {risk.score}</span>{isOverdue(row) && <em>已逾期</em>}</span><strong>{row.site}<ChevronRight size={16} /></strong><small>{template.name} · {row.inspector}</small><span className="safety-record-bottom"><b className={row.status === "closed" ? "closed" : ""}>{STATUS_LABELS[row.status]}</b><time>{formatTime(row.updatedAt)}</time></span></button>; }) : <div className="safety-empty"><ClipboardCheck size={36} /><strong>{inspections.length ? "没有符合条件的记录" : "第一份现场记录，从这里开始"}</strong><p>{inspections.length ? "尝试切换筛选或搜索关键词。" : "完成左侧检查后，责任人、整改期限和复核结果都会在这里持续更新。"}</p></div>}</div><div className="safety-register-footnote"><ShieldCheck size={18} /><p>参考 FMEA 风险评价与 NIOSH 控制层级。当前数据归属您的账号，保存在本机服务，尚未提交校方。</p></div></aside></div>
+  const startNew = () => { onSelect(null); setFormVersion((value) => value + 1); };
+  const filters: { value: InspectionViewState["filter"]; label: string }[] = [{ value: "all", label: "全部" }, { value: "open", label: "待处理" }, { value: "review", label: "待复核" }, { value: "high", label: "高优先" }, { value: "overdue", label: "逾期" }, { value: "closed", label: "已闭环" }];
+  const statCards: { label: string; value: number; icon: typeof ClipboardCheck; caption: string; filter: InspectionViewState["filter"] }[] = [{ label: "待处理记录", value: stats.open, icon: ClipboardCheck, caption: "从登记到复核", filter: "open" }, { label: "高优先风险", value: stats.high, icon: ShieldAlert, caption: "含严重后果优先规则", filter: "high" }, { label: "逾期未闭环", value: stats.overdue, icon: Clock3, caption: "按整改截止日期统计", filter: "overdue" }, { label: "已完成闭环", value: stats.closed, icon: ShieldCheck, caption: "措施有效性已复核", filter: "closed" }];
+  return <div className="safety-page">
+    <header className="safety-page-header"><div><span className="safety-eyebrow">SAFETY / FIELD OPERATIONS</span><h1>安全巡检</h1><p>巡检台账 · 整改落实 · 效果复核</p></div><button className="safety-primary" onClick={startNew}><Plus size={17} />新建巡检</button></header>
+    <div className="safety-stats">{statCards.map(({ label, value, icon: Icon, caption, filter: targetFilter }, index) => <button className={`safety-stat stat-${index}`} key={label} aria-pressed={filter === targetFilter} onClick={() => onViewChange({ ...view, search: "", filter: targetFilter })}><span><Icon size={17} />{label}</span><strong>{value.toString().padStart(2, "0")}</strong><small>{caption}</small></button>)}</div>
+    <div className={`safety-layout ${selectedId ? "has-selection" : ""}`}>
+      <div className="safety-main">
+        {selectedId && <div className="safety-detail-toolbar"><button className="safety-subtle" onClick={() => onSelect(null)}><ArrowLeft size={16} />关闭详情</button></div>}
+        {selected ? <InspectionDetail key={`${selected.id}:${selected.status}`} row={selected} onAction={handleAction} notify={notify} /> : selectedId ? <div className="safety-unavailable" role="status"><ShieldAlert size={28} /><h2>巡检记录不可用</h2><p>记录可能已移除，或不属于当前账号。</p><button className="safety-subtle" onClick={startNew}><Plus size={16} />新建巡检</button></div> : <InspectionForm key={formVersion} onSave={(row) => { onChange((prev) => [row, ...prev]); onSelect(row.id); notify("巡检已登记，请继续明确整改责任与措施"); }} />}
+      </div>
+      <aside className="safety-records"><div className="safety-records-header"><div><span className="safety-eyebrow">INSPECTION REGISTER</span><h2>巡检台账 <span>{inspections.length}</span></h2></div><ClipboardCheck size={24} /></div>
+        <label className="safety-search"><Search size={16} /><input value={search} onChange={(event) => onViewChange({ ...view, search: event.target.value })} placeholder="搜索地点、人员、场景" aria-label="搜索巡检台账" /></label>
+        <div className="safety-filters" aria-label="筛选巡检记录">{filters.map(({ value, label }) => <button key={value} aria-pressed={filter === value} className={filter === value ? "active" : ""} onClick={() => onViewChange({ ...view, filter: value })}>{label}</button>)}</div>
+        <div className="safety-record-list">{visible.length ? visible.map((row) => { const risk = inspectionRisk(row); const template = SAFETY_TEMPLATES.find(({ id }) => id === row.templateId) as SafetyTemplate; return <button key={row.id} onClick={() => onSelect(row.id)} aria-current={selectedId === row.id ? "true" : undefined} className={`safety-record ${selectedId === row.id ? "selected" : ""}`}><span className="safety-record-top"><span className={`safety-risk-badge ${risk.level}`}>{risk.label} · {risk.score}</span>{isOverdue(row) && <em>已逾期</em>}</span><strong>{row.site}<ChevronRight size={16} /></strong><small>{template.name} · {row.inspector}</small><span className="safety-record-bottom"><b className={row.status === "closed" ? "closed" : ""}>{STATUS_LABELS[row.status]}</b><time>{formatTime(row.updatedAt)}</time></span></button>; }) : <div className="safety-empty"><ClipboardCheck size={36} /><strong>{inspections.length ? "没有符合条件的记录" : "暂无巡检记录"}</strong><p>{inspections.length ? "尝试切换筛选或搜索关键词。" : "登记后显示巡检与整改进展。"}</p></div>}</div>
+        <div className="safety-register-footnote"><ShieldCheck size={18} /><p>参考 FMEA 风险评价与 NIOSH 控制层级。当前记录归属您的账号，保存在{storageLabel}，尚未提交校方。</p></div>
+      </aside>
+    </div>
   </div>;
 }

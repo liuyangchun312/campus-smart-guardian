@@ -1,0 +1,34 @@
+.sidebar .nav-group .nav-caption {
+  display: block;
+  margin: 14px 10px 5px;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+.sidebar .nav-group:first-child .nav-caption { margin-top: 8px; }
+.sidebar .nav-help { border-top: 1px solid var(--line); padding-top: 10px; }
+.sidebar .nav-help > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 11px;
+  color: light-dark(#66746b, #b9cebc);
+  cursor: pointer;
+  list-style: none;
+}
+.sidebar .nav-help > summary::-webkit-details-marker { display: none; }
+.sidebar .nav-help[open] > summary > svg { transform: rotate(180deg); }
+.sidebar .workspace-label { flex-wrap: wrap; gap: 6px; }
+.sidebar .workspace-pill { margin-left: 0; font-size: 9px; white-space: normal; }
+.sidebar .sidebar-tools { margin-top: 10px; }
+.sidebar .sidebar-bottom { padding-top: 12px; }
+.sidebar .nav-item { min-height: 40px; }
+.sidebar .nav-item > span { min-width: 0; }
+.sidebar .brand { margin-bottom: 0; }
+.sidebar .nav-caption, .sidebar .care-overline { letter-spacing: 0; }
+.workspace-pill, .nav-help, .nav-group { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .topbar .breadcrumb { min-width: 0; }
+  .topbar .breadcrumb strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

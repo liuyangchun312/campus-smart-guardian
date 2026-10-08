@@ -44,6 +44,7 @@ export function summarizeOperations(
     urgentOrders: allOrders.filter((row) => row.status !== "resolved" && row.priority !== "普通").length,
     overdueInspections: allInspections.filter((row) => isOverdue(row, now)).length,
     openInspections: allInspections.filter((row) => row.status !== "closed").length,
+    reviewInspections: allInspections.filter((row) => row.status === "review").length,
     resolvedOrders, closedInspections,
     orderClosureRate: scopedOrders.length ? Math.round((resolvedOrders / scopedOrders.length) * 100) : null,
     inspectionClosureRate: scopedInspections.length ? Math.round((closedInspections / scopedInspections.length) * 100) : null,
@@ -51,7 +52,7 @@ export function summarizeOperations(
 }
 
 export type PendingTask = {
-  key: string; type: "order" | "inspection"; title: string; location: string;
+  id: string; key: string; type: "order" | "inspection"; title: string; location: string;
   createdAt: string; label: string; alert: boolean; rank: number;
 };
 
@@ -59,7 +60,7 @@ export function pendingTasks(orders: WorkOrder[], inspections: Inspection[], now
   const orderTasks: PendingTask[] = recordsInPeriod(orders, "all", now)
     .filter((row) => row.status !== "resolved")
     .map((row) => ({
-      key: `order-${row.id}`, type: "order", title: row.description, location: row.location,
+      id: row.id, key: `order-${row.id}`, type: "order", title: row.description, location: row.location,
       createdAt: row.createdAt, label: `${row.priority} · ${row.status === "draft" ? "待提交" : "已自行提交"}`,
       alert: row.priority !== "普通", rank: row.priority === "特急" ? 0 : row.priority === "紧急" ? 2 : 4,
     }));
@@ -69,7 +70,7 @@ export function pendingTasks(orders: WorkOrder[], inspections: Inspection[], now
       const risk = inspectionRisk(row);
       const overdue = isOverdue(row, now);
       return {
-        key: `inspection-${row.id}`, type: "inspection", title: SAFETY_TEMPLATES.find(({ id }) => id === row.templateId)?.name ?? "安全巡检",
+        id: row.id, key: `inspection-${row.id}`, type: "inspection", title: SAFETY_TEMPLATES.find(({ id }) => id === row.templateId)?.name ?? "安全巡检",
         location: row.site, createdAt: row.createdAt,
         label: overdue ? `整改逾期 · ${row.remediation!.dueDate}` : `${risk.label} · ${STATUS_LABELS[row.status]}`,
         alert: overdue || risk.level === "high", rank: risk.level === "high" ? 0 : overdue ? 1 : row.status === "review" ? 2 : 3,

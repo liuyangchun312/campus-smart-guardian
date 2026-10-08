@@ -12,7 +12,7 @@ export function apiFetch(path: string, options: RequestInit = {}) {
 }
 export async function api<T>(path: string, body?: unknown, method = body === undefined ? "GET" : "POST"): Promise<T> {
   const response = await apiFetch(path, { method, headers: { "Content-Type": "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-  const data = await response.json().catch(() => ({ error: "服务未返回有效数据，请检查本机API是否启动。" }));
+  const data = await response.json().catch(() => ({ error: "服务未返回有效数据，请检查服务连接后重试。" }));
   if (!response.ok) throw new ApiError(data.error || "请求失败，请稍后重试。", response.status);
   return data as T;
 }

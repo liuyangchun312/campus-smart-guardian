@@ -204,8 +204,13 @@ async function callModel(config, messages, probe, fetchImpl, sources = []) {
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(probe ? 18000 : 45000),
-    redirect: "error",
+    redirect: "manual",
   });
+  // Workers only supports manual/follow; never forward a model key to a redirect target.
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel().catch(() => {});
+    throw new HttpError(400, "模型服务返回重定向，请填写服务商提供的最终 API 地址。", "baseUrl");
+  }
   if (!response.ok) {
     await response.body?.cancel().catch(() => {});
     if ([401, 403].includes(response.status))
@@ -322,6 +327,7 @@ export async function createGuardianServer({
       if (await accounts.handle(req, res, path)) return;
       if (req.method === "GET" && path === "/api/health")
         return send(res, 200, {
+          deployment: database ? "cloud" : "local",
           mode: config?.enabled ? "ai" : "local",
           model: config?.model ?? "",
           verifiedAt: config?.verifiedAt ?? null,

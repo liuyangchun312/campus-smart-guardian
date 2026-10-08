@@ -17,7 +17,7 @@ async function close(server) {
   server.closeAllConnections();
   await new Promise((resolve) => server.close(resolve));
 }
-async function fixture(t) {
+async function fixture(t, { fetchImpl } = {}) {
   const dir = await mkdtemp(join(tmpdir(), "guardian-ai-test-"));
   const requests = [];
   let failure = 0;
@@ -32,6 +32,7 @@ async function fixture(t) {
     });
     res.setHeader("Content-Type", "application/json");
     if (failure) {
+      if (failure === 302) res.setHeader("Location", "/redirect-target");
       res.writeHead(failure);
       res.end(JSON.stringify({ error: "mock-secret-must-not-leak" }));
       return;
@@ -59,7 +60,7 @@ async function fixture(t) {
   });
   const upstreamUrl = await listen(upstream);
   const configFile = join(dir, "ai-config.json");
-  let app = await createGuardianServer({ configFile, env: {}, bootstrapToken: "fixture-admin-setup" });
+  let app = await createGuardianServer({ configFile, env: {}, bootstrapToken: "fixture-admin-setup", fetchImpl });
   let appUrl = await listen(app);
   t.after(async () => {
     await close(app);
@@ -117,6 +118,33 @@ async function fixture(t) {
     },
   };
 }
+
+test("model connection works with Cloudflare supported redirect modes", async (t) => {
+  const f = await fixture(t, {
+    fetchImpl: (url, init) => {
+      if (init.redirect === "error") throw new TypeError("Invalid redirect value at the edge");
+      return fetch(url, init);
+    },
+  });
+  const connected = await f.request("/api/ai/connect", f.config);
+  assert.equal(connected.status, 200);
+  assert.equal(connected.body.mode, "ai");
+  const chat = await f.request("/api/chat", { messages: [{ role: "user", content: "你好" }] });
+  assert.equal(chat.status, 200);
+  assert.equal(chat.body.text, "来自模拟 Chat 的答复");
+});
+
+test("model redirects are rejected without following or saving the key", async (t) => {
+  const f = await fixture(t);
+  f.fail(302);
+  const connected = await f.request("/api/ai/connect", f.config);
+  assert.equal(connected.status, 400);
+  assert.equal(connected.body.field, "baseUrl");
+  assert.match(connected.body.error, /重定向/);
+  assert.equal(f.requests.length, 1);
+  assert.equal((await f.request("/api/health")).body.mode, "local");
+  await assert.rejects(readFile(f.configFile), { code: "ENOENT" });
+});
 
 test("test, activate, chat and restart preserve configuration without exposing key", async (t) => {
   const f = await fixture(t);

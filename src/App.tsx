@@ -37,6 +37,11 @@ import type { EvidenceSource } from "../shared/knowledge.mjs";
 import { getLocalReply } from "./lib/advisor";
 import { useStoredState } from "./lib/storage";
 import type { Message, OrderStatus, Page, WorkOrder } from "./types";
+import { parseWorkspaceRoute, workspaceHash, type InspectionViewState, type OrdersViewState, type WorkspaceRoute } from "./lib/navigation";
+import type { RecordPeriod } from "./lib/operations";
+import { DeploymentProvider, useDeployment } from "./lib/deployment";
+import { emptyRepairDraft, type RepairDraft } from "./lib/repair";
+import "./phase-one.css";
 
 const Chat = lazy(() => import("./components/Chat"));
 const Repair = lazy(() => import("./components/Repair"));
@@ -60,6 +65,12 @@ const navItems = [
   { id: "research", label: "方法与文献", icon: FlaskConical },
   { id: "admin", label: "管理控制台", icon: ShieldCheck },
 ] as const;
+const navGroups: { label: string; pages: Page[] }[] = [
+  { label: "工作台", pages: ["home", "operations"] },
+  { label: "业务办理", pages: ["repair", "orders", "safety"] },
+  { label: "咨询与资料", pages: ["chat", "knowledge", "library"] },
+  { label: "管理", pages: ["admin"] },
+];
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 const isEvidenceSources = (value: unknown): value is EvidenceSource[] =>
@@ -106,18 +117,21 @@ const isOrders = (value: unknown): value is WorkOrder[] =>
   );
 const isBoolean = (value: unknown): value is boolean =>
   typeof value === "boolean";
-const getPage = (): Page => {
-  const id = window.location.hash.slice(1);
-  return navItems.some((item) => item.id === id) ? (id as Page) : "home";
-};
-
 export default function App() {
-  return <SessionGate>{(user, initial, exit) => <WorkspaceApp key={user.id} user={user} initial={initial} onExit={exit} />}</SessionGate>;
+  return <DeploymentProvider><SessionGate>{(user, initial, exit) => <WorkspaceApp key={user.id} user={user} initial={initial} onExit={exit} />}</SessionGate></DeploymentProvider>;
 }
 
 function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: WorkspaceSnapshot; onExit: () => void }) {
-  const allowedPage = () => getPage() === "admin" && user.role !== "admin" ? "home" : getPage();
-  const [page, setPage] = useState<Page>(allowedPage);
+  const readRoute = () => parseWorkspaceRoute(window.location.hash, user.role);
+  const [route, setRoute] = useState<WorkspaceRoute>(readRoute);
+  const page = route.page;
+  const deployment = useDeployment();
+  const [ordersView, setOrdersView] = useState<OrdersViewState>({ search: "", filter: "all", priority: "all", layout: "list" });
+  const [inspectionView, setInspectionView] = useState<InspectionViewState>({ search: "", filter: "all" });
+  const [operationsPeriod, setOperationsPeriod] = useState<RecordPeriod>("30");
+  const [repairDraft, setRepairDraft] = useState<RepairDraft>(emptyRepairDraft);
+  const appliedFilter = useRef("");
+  const editedViews = useRef({ orders: false, safety: false });
   const [accountOpen, setAccountOpen] = useState(false);
   const workspace = useAccountWorkspace(initial);
   const { messages, orders, inspections } = workspace.data;
@@ -161,10 +175,16 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
   }, []);
   useEffect(() => {
     const changed = () => {
-      setPage(allowedPage());
+      const next = readRoute();
+      setRoute(next);
+      const visited = window.history.state?.guardianRoute === workspaceHash(next);
+      applyRouteFilter(next, !visited);
+      rememberRoute(next);
       setMenuOpen(false);
       window.scrollTo({ top: 0 });
     };
+    applyRouteFilter(readRoute());
+    rememberRoute(readRoute());
     window.addEventListener("hashchange", changed);
     return () => window.removeEventListener("hashchange", changed);
   }, []);
@@ -238,12 +258,56 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
       notify("旧版记录已加入当前账号，正在同步；原始浏览器记录保留。");
     } catch (e) { notify(e instanceof Error ? e.message : "无法读取旧版记录。"); }
   };
-  const navigate = (next: Page) => {
+  const applyRouteFilter = (next: WorkspaceRoute, force = false) => {
+    const key = `${next.page}:${next.filter ?? ""}`;
+    if (!force && appliedFilter.current === key) return;
+    appliedFilter.current = key;
+    // Old history links must not override filters the user has since edited.
+    if ((next.page === "orders" || next.page === "safety") && next.filter) {
+      if (!force && editedViews.current[next.page]) return;
+      editedViews.current[next.page] = false;
+    }
+    if (next.page === "orders" && next.filter) {
+      setOrdersView((previous) => ({ ...previous, search: "", filter: next.filter === "urgent" ? "open" : next.filter as OrdersViewState["filter"], priority: next.filter === "urgent" ? "urgent" : "all" }));
+    }
+    if (next.page === "safety" && next.filter) {
+      setInspectionView((previous) => ({ ...previous, search: "", filter: next.filter as InspectionViewState["filter"] }));
+    }
+  };
+  const rememberRoute = (next: WorkspaceRoute) => {
+    window.history.replaceState({ ...window.history.state, guardianRoute: workspaceHash(next) }, "");
+  };
+  const navigate = (next: Page, options: { recordId?: string; filter?: string } = {}) => {
     if (next === "admin" && user.role !== "admin") return;
-    setPage(next);
-    window.location.hash = next;
+    const nextRoute = parseWorkspaceRoute(workspaceHash({ page: next, ...options }), user.role);
+    setRoute(nextRoute);
+    applyRouteFilter(nextRoute, true);
+    window.location.hash = workspaceHash(nextRoute);
     setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "instant" });
+  };
+  const openRecord = (type: "order" | "inspection", id: string) => navigate(type === "order" ? "orders" : "safety", { recordId: id });
+  const selectRecord = (id: string | null) => {
+    const next = { ...route, recordId: id ?? undefined, filter: undefined };
+    setRoute(next);
+    window.location.hash = workspaceHash(next);
+  };
+  const clearRouteFilter = () => {
+    if (!route.filter) return;
+    const next = { ...route, filter: undefined };
+    setRoute(next);
+    appliedFilter.current = `${next.page}:`;
+    window.history.replaceState({ ...window.history.state, guardianRoute: workspaceHash(next) }, "", workspaceHash(next));
+  };
+  const changeOrdersView = (next: OrdersViewState) => {
+    editedViews.current.orders = true;
+    setOrdersView(next);
+    clearRouteFilter();
+  };
+  const changeInspectionView = (next: InspectionViewState) => {
+    editedViews.current.safety = true;
+    setInspectionView(next);
+    clearRouteFilter();
   };
   const ask = async (input: string, identity?: Message["identity"]) => {
     const text = input.trim().slice(0, 2100);
@@ -344,7 +408,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
   const reset = () => {
     if (
       !busyRef.current &&
-      window.confirm("开始新对话将清除当前浏览器里的咨询记录。确定继续吗？")
+      window.confirm("开始新对话将清除当前账号的咨询记录。确定继续吗？")
     ) {
       setMessages([]);
       notify("已开始新对话");
@@ -352,7 +416,8 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
   };
   const saveOrder = (order: WorkOrder) => {
     setOrders((previous) => [order, ...previous].slice(0, 1000));
-    navigate("orders");
+    setRepairDraft(emptyRepairDraft);
+    navigate("orders", { recordId: order.id });
     notify("工单已加入您的账号，请复制后通过学校正式渠道提交");
   };
   const updateOrder = (id: string, status: OrderStatus) => {
@@ -418,11 +483,12 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
         <div className="workspace-label">
           <span className="campus-dot" />
           <span>校园服务工作台</span>
-          <span className="workspace-pill">本地版</span>
+          <span className="workspace-pill" title={deployment.description}>{deployment.label}</span>
         </div>
-        <span className="nav-caption">服务与管理</span>
         <nav aria-label="主导航">
-          {navItems.filter((item) => item.id !== "admin" || user.role === "admin").map((item) => (
+          {navGroups.filter((group) => group.label !== "管理" || user.role === "admin").map((group) => <div className="nav-group" key={group.label}>
+          <span className="nav-caption">{group.label}</span>
+          {group.pages.map((id) => navItems.find((item) => item.id === id)!).map((item) => (
             <button
               key={item.id}
               className={`nav-item ${page === item.id ? "active" : ""}`}
@@ -440,9 +506,14 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
               ) : null}
             </button>
           ))}
+          </div>)}
         </nav>
         <div className="sidebar-tools">
-          <span className="nav-caption">实用帮助</span>
+          <details className="nav-help" open={page === "research" ? true : undefined}>
+          <summary>帮助与方法<ChevronDown size={14} /></summary>
+          <button className={`nav-item ${page === "research" ? "active" : ""}`} aria-current={page === "research" ? "page" : undefined} onClick={() => navigate("research")}>
+            <FlaskConical size={19} strokeWidth={1.7} /><span>方法与文献</span>
+          </button>
           <button className="nav-item" onClick={() => setTool("help")}>
             <HeartHandshake size={19} strokeWidth={1.7} />
             <span>求助与联系</span>
@@ -463,6 +534,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
             <span>AI 连接设置</span>
             {mode === "ai" && <span className="nav-active-dot" />}
           </button>}
+          </details>
         </div>
         <div className="sidebar-bottom">
           <div className="sidebar-care">
@@ -554,10 +626,11 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
               openTool={setTool}
               orders={orders}
               inspections={inspections}
+              openRecord={openRecord}
             />
           )}
-          {page === "operations" && <Operations orders={orders} inspections={inspections} navigate={navigate} />}
-          {page === "safety" && <Safety inspections={inspections} onChange={setInspections} notify={notify} />}
+          {page === "operations" && <Operations orders={orders} inspections={inspections} navigate={navigate} openRecord={openRecord} period={operationsPeriod} onPeriodChange={setOperationsPeriod} />}
+          {page === "safety" && <Safety inspections={inspections} onChange={setInspections} notify={notify} selectedId={route.recordId ?? null} onSelect={selectRecord} view={inspectionView} onViewChange={changeInspectionView} />}
           {page === "knowledge" && <Knowledge ask={(value) => void ask(value)} />}
           {page === "research" && <Research navigate={navigate} notify={notify} />}
           {page === "admin" && user.role === "admin" && <Admin onAiSettings={openAiSettings} />}
@@ -574,17 +647,21 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
             />
           )}
           {page === "repair" && (
-            <Repair onSave={saveOrder} onOrders={() => navigate("orders")} />
+            <Repair draft={repairDraft} onDraftChange={setRepairDraft} onSave={saveOrder} onOrders={() => navigate("orders")} />
           )}
           {page === "orders" && (
             <Orders
               orders={orders}
+              selectedId={route.recordId ?? null}
+              onSelect={selectRecord}
+              view={ordersView}
+              onViewChange={changeOrdersView}
               onUpdate={updateOrder}
               onDelete={(id) => {
                 setOrders((previous) =>
                   previous.filter((order) => order.id !== id),
                 );
-                notify("本地工单已删除");
+                notify("工单已从当前账号删除");
               }}
               onCreate={() => navigate("repair")}
               notify={notify}

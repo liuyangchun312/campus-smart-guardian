@@ -1,17 +1,24 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   ArrowRight,
   ClipboardList,
   Copy,
+  LayoutGrid,
+  List,
   MapPin,
   Plus,
   Search,
   ShieldCheck,
   Trash2,
+  X,
 } from "lucide-react";
 import Modal from "./Modal";
 import { formatDate } from "../lib/storage";
+import { filterOrders } from "../lib/orders";
+import type { OrdersViewState } from "../lib/navigation";
+import { useDeployment } from "../lib/deployment";
 import type { OrderStatus, WorkOrder } from "../types";
+import "./orders.css";
 
 export const statusLabels: Record<OrderStatus, string> = {
   draft: "待提交学校",
@@ -27,28 +34,32 @@ export default function Orders({
   onDelete,
   onCreate,
   notify,
+  selectedId,
+  onSelect,
+  view,
+  onViewChange,
 }: {
   orders: WorkOrder[];
   onUpdate: (id: string, status: OrderStatus) => void;
   onDelete: (id: string) => void;
   onCreate: () => void;
   notify: (value: string) => void;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  view: OrdersViewState;
+  onViewChange: (view: OrdersViewState) => void;
 }) {
-  const [filter, setFilter] = useState("all");
-  const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { label, storageLabel, description } = useDeployment();
   const selected = orders.find((order) => order.id === selectedId);
-  const filtered = useMemo(
-    () =>
-      orders.filter(
-        (order) =>
-          (filter === "all" || order.status === filter) &&
-          `${order.id}${order.location}${order.description}`
-            .toLowerCase()
-            .includes(search.trim().toLowerCase()),
-      ),
-    [orders, filter, search],
-  );
+  const filtered = useMemo(() => filterOrders(orders, view), [orders, view]);
+  const resetFilters = () => onViewChange({ ...view, search: "", filter: "all", priority: "all" });
+  const tabs: { id: OrdersViewState["filter"]; label: string }[] = [
+    { id: "all", label: "全部" },
+    { id: "open", label: "未解决" },
+    { id: "draft", label: "待提交" },
+    { id: "submitted", label: "已提交" },
+    { id: "resolved", label: "已解决" },
+  ];
   const copy = async (order: WorkOrder) => {
     try {
       await navigator.clipboard.writeText(orderText(order));
@@ -58,63 +69,73 @@ export default function Orders({
     }
   };
   return (
-    <div className="page-enter">
+    <div className="page-enter orders-page">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">每件小事，都有记录</span>
+          <span className="eyebrow">报修记录</span>
           <h1>
             我的工单 <ClipboardList size={25} />
           </h1>
-          <p>管理您的账号报修记录，及时跟进您关心的事情。</p>
+          <p>当前账号共 {orders.length} 张工单，{orders.filter((order) => order.status !== "resolved").length} 张未解决。</p>
         </div>
         <button className="button primary small" onClick={onCreate}>
           <Plus size={16} />
           新建报修
         </button>
       </div>
-      <div className="inline-notice">
+      <div className="inline-notice" title={description}>
         <ShieldCheck size={19} />
         <p>
-          这里的记录归属当前账号，保存在本机服务。提交和解决状态由您手动更新，未连接学校派单系统。
+          {label} · 记录保存在{storageLabel}。提交和解决状态由您手动更新，未连接学校派单系统。
         </p>
       </div>
-      <div className="orders-toolbar">
-        <div className="filter-tabs" aria-label="工单状态筛选">
-          {[
-            { id: "all", label: "全部工单" },
-            { id: "draft", label: "待提交" },
-            { id: "submitted", label: "已提交" },
-            { id: "resolved", label: "已解决" },
-          ].map((tab) => (
+      <div className="orders-filters">
+        <div className="filter-tabs" role="group" aria-label="工单状态筛选">
+          {tabs.map((tab) => (
             <button
               key={tab.id}
-              className={filter === tab.id ? "active" : ""}
-              onClick={() => setFilter(tab.id)}
+              className={view.filter === tab.id ? "active" : ""}
+              aria-pressed={view.filter === tab.id}
+              onClick={() => onViewChange({ ...view, filter: tab.id })}
             >
               {tab.label}
               <span>
                 {
                   orders.filter(
-                    (order) => tab.id === "all" || order.status === tab.id,
+                    (order) => tab.id === "all" || (tab.id === "open" ? order.status !== "resolved" : order.status === tab.id),
                   ).length
                 }
               </span>
             </button>
           ))}
         </div>
+        <div className="orders-filter-controls">
         <div className="search-field">
           <Search size={17} />
           <input
             aria-label="搜索工单"
-            placeholder="搜索地点、故障或工单号"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            placeholder="搜索地点、故障、类型或工单号"
+            value={view.search}
+            onChange={(event) => onViewChange({ ...view, search: event.target.value })}
           />
         </div>
+        <select aria-label="紧急程度筛选" value={view.priority} onChange={(event) => onViewChange({ ...view, priority: event.target.value as OrdersViewState["priority"] })}>
+          <option value="all">全部紧急程度</option>
+          <option value="urgent">紧急及特急</option>
+          <option value="普通">普通</option>
+          <option value="紧急">紧急</option>
+          <option value="特急">特急</option>
+        </select>
+        <div className="orders-layout-toggle" role="group" aria-label="工单显示方式">
+          <button className={view.layout === "list" ? "active" : ""} aria-label="列表视图" title="列表视图" aria-pressed={view.layout === "list"} onClick={() => onViewChange({ ...view, layout: "list" })}><List size={18} /></button>
+          <button className={view.layout === "cards" ? "active" : ""} aria-label="卡片视图" title="卡片视图" aria-pressed={view.layout === "cards"} onClick={() => onViewChange({ ...view, layout: "cards" })}><LayoutGrid size={17} /></button>
+        </div>
+        </div>
       </div>
-      <div className="order-list">
+      <div className="orders-results" aria-live="polite">显示 {filtered.length} / {orders.length} 张工单</div>
+      <div className={`orders-records orders-layout-${view.layout}`}>
         {filtered.length === 0 ? (
-          <div className="empty-state panel">
+          <div className="empty-state orders-empty">
             <span>
               <ClipboardList size={42} strokeWidth={1.3} />
             </span>
@@ -132,8 +153,26 @@ export default function Orders({
                 创建第一张工单
               </button>
             )}
+            {orders.length > 0 && <button className="button outline" onClick={resetFilters}><X size={16} />清除筛选</button>}
           </div>
         ) : (
+          <>
+          <div className="orders-table-wrap">
+            <table className="orders-table">
+              <caption className="orders-sr-only">当前筛选结果，共 {filtered.length} 张报修工单</caption>
+              <thead><tr><th scope="col">故障与工单号</th><th scope="col">地点 / 类型</th><th scope="col">跟进状态</th><th scope="col">紧急程度</th><th scope="col">创建时间</th><th scope="col">操作</th></tr></thead>
+              <tbody>{filtered.map((order) => <tr key={order.id}>
+                <td><button className="orders-record-title" onClick={() => onSelect(order.id)} title={order.description}>{order.description}</button><code>{order.id}</code></td>
+                <td><span className="orders-location">{order.location}</span><small>{order.category}</small></td>
+                <td><span className={`status-badge ${order.status}`}>{statusLabels[order.status]}</span></td>
+                <td><span className={`priority-badge ${order.priority === "特急" ? "danger" : order.priority === "紧急" ? "urgent" : ""}`}>{order.priority}</span></td>
+                <td><time dateTime={order.createdAt}>{formatDate(order.createdAt, true)}</time></td>
+                <td><div className="orders-row-actions"><button className="icon-button" title="复制工单" aria-label={`复制工单 ${order.id}`} onClick={() => void copy(order)}><Copy size={16} /></button><button className="icon-button" title="查看详情" aria-label={`查看工单 ${order.id}`} onClick={() => onSelect(order.id)}><ArrowRight size={16} /></button></div></td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+          <div className="orders-card-list">
+          {
           filtered.map((order) => (
             <article className="order-card panel" key={order.id}>
               <div className="order-card-top">
@@ -146,7 +185,7 @@ export default function Orders({
                 >
                   {order.priority}
                 </span>
-                <time>{formatDate(order.createdAt, true)}</time>
+                <time dateTime={order.createdAt}>{formatDate(order.createdAt, true)}</time>
               </div>
               <div className="order-card-body">
                 <span className="order-type-icon">
@@ -174,7 +213,7 @@ export default function Orders({
                   </button>
                   <button
                     className="text-button accent"
-                    onClick={() => setSelectedId(order.id)}
+                    onClick={() => onSelect(order.id)}
                   >
                     查看详情
                     <ArrowRight size={14} />
@@ -182,11 +221,13 @@ export default function Orders({
                 </div>
               </div>
             </article>
-          ))
+          ))}
+          </div>
+          </>
         )}
       </div>
       {selected && (
-        <Modal title="报修工单详情" onClose={() => setSelectedId(null)}>
+        <Modal title="报修工单详情" onClose={() => onSelect(null)}>
           <div className="detail-meta">
             <code>{selected.id}</code>
             <span className={`status-badge ${selected.status}`}>
@@ -214,7 +255,7 @@ export default function Orders({
                   {statusLabels[entry.status]}
                   <small>
                     {formatDate(entry.at, true)} ·{" "}
-                    {i === 0 ? "本地保存" : "您手动更新"}
+                    {i === 0 ? `保存于${storageLabel}` : "您手动更新"}
                   </small>
                 </p>
               </div>
@@ -239,10 +280,10 @@ export default function Orders({
               className="text-button delete-button"
               onClick={() => {
                 if (
-                  window.confirm("确定删除这张本地工单吗？删除后无法恢复。")
+                  window.confirm("确定删除这张账号工单吗？删除后无法恢复。")
                 ) {
                   onDelete(selected.id);
-                  setSelectedId(null);
+                  onSelect(null);
                 }
               }}
             >
@@ -257,6 +298,11 @@ export default function Orders({
               复制完整工单
             </button>
           </div>
+        </Modal>
+      )}
+      {selectedId !== null && !selected && (
+        <Modal title="工单不存在" onClose={() => onSelect(null)}>
+          <div className="orders-missing"><ClipboardList size={30} /><p>当前账号中没有找到工单 <code>{selectedId}</code>。记录可能已删除，或链接属于其他账号。</p><button className="button outline" onClick={() => onSelect(null)}>返回工单列表</button></div>
         </Modal>
       )}
     </div>

@@ -103,6 +103,41 @@ describe("待办与完成率口径", () => {
     expect(tasks.map((task) => task.key)).toEqual(["inspection-high", "inspection-INSP-1", "order-WO-1"]);
     expect(tasks[0].alert).toBe(true);
   });
+
+  it("preserves original record IDs for direct links, including IDs shared by both record types", () => {
+    const tasks = pendingTasks([order({ id: "shared/id #1" })], [inspection({ id: "shared/id #1" })], now);
+    expect(tasks.map(({ id, type }) => ({ id, type }))).toEqual([
+      { id: "shared/id #1", type: "inspection" },
+      { id: "shared/id #1", type: "order" },
+    ]);
+  });
+
+  it("keeps priority and oldest-first ordering while excluding completed and future records", () => {
+    const tasks = pendingTasks([
+      order({ id: "normal" }),
+      order({ id: "urgent", priority: "紧急" }),
+      order({ id: "critical-new", priority: "特急" }),
+      order({ id: "critical-old", priority: "特急", createdAt: new Date(2026, 8, 1).toISOString() }),
+      order({ id: "done", status: "resolved", priority: "特急" }),
+      order({ id: "future", createdAt: new Date(2026, 9, 3).toISOString() }),
+    ], [
+      inspection({ id: "high", ratings: { severity: 5, occurrence: 1, detection: 1 } }),
+      inspection({ id: "overdue" }),
+      inspection({ id: "review", status: "review" }),
+      inspection({ id: "closed", status: "closed" }),
+    ], now);
+    expect(tasks.map((task) => task.id)).toEqual(["critical-old", "high", "critical-new", "overdue", "review", "urgent", "normal"]);
+  });
+
+  it("counts all historical inspections awaiting review for the home action", () => {
+    const summary = summarizeOperations([], [
+      inspection({ id: "review", status: "review" }),
+      inspection({ id: "closed", status: "closed" }),
+      inspection({ id: "future", status: "review", createdAt: new Date(2026, 9, 3).toISOString() }),
+    ], "7", now);
+    expect(summary.reviewInspections).toBe(1);
+    expect(summary.scopedInspections).toHaveLength(0);
+  });
 });
 
 describe("CSV 导出", () => {

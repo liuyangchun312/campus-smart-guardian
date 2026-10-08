@@ -15,6 +15,7 @@ import {
   Sprout,
 } from "lucide-react";
 import Modal from "./Modal";
+import { useDeployment } from "../lib/deployment";
 
 export default function Tools({
   tool,
@@ -27,6 +28,7 @@ export default function Tools({
   notify: (value: string) => void;
   draftCount: number;
 }) {
+  const { storageLabel } = useDeployment();
   const [salary, setSalary] = useState("3000");
   const [hours, setHours] = useState("12");
   const [kind, setKind] = useState("1.5");
@@ -306,7 +308,7 @@ export default function Tools({
                   ? `您有 ${draftCount} 张工单待提交学校`
                   : "目前没有待提交的工单"}
               </h3>
-              <p>本地保存不等于校方受理，请通过学校正式渠道提交。</p>
+              <p>账号保存不等于校方受理，请通过学校正式渠道提交。</p>
             </div>
           </div>
           <div className="notification-item">
@@ -314,7 +316,7 @@ export default function Tools({
             <div>
               <h3>保护好您的个人信息</h3>
               <p>
-                咨询时不必提供身份证号、银行卡号等敏感资料。公用电脑上使用后，可清除本地对话。
+                咨询时不必提供身份证号、银行卡号等敏感资料。公用电脑上使用后，请退出账号。
               </p>
             </div>
           </div>
@@ -334,7 +336,7 @@ export default function Tools({
           <div className="tool-intro">
             <ShieldCheck size={23} />
             <p>
-              对话、工单和巡检整改记录按账号保存在本机服务的数据库中，不会自动同步到学校。
+              对话、工单和巡检整改记录按账号保存在{storageLabel}中，不会自动同步到学校。
             </p>
           </div>
           <div className="privacy-copy">
@@ -344,7 +346,7 @@ export default function Tools({
             </p>
             <h3>连接 AI 服务时</h3>
             <p>
-              您发送的问题及最近对话会经本机服务转发到已配置的 AI
+              您发送的问题及最近对话会经账号服务转发到已配置的 AI
               服务商。请勿输入敏感个人信息。页面会标明当前连接状态。
             </p>
             <h3>删除与保存</h3>
