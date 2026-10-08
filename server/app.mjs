@@ -305,11 +305,24 @@ async function callModel(config, messages, probe, fetchImpl, sources = [], signa
           .map((item) => item.text)
           .join("\n")
     : payload.choices?.[0]?.message?.content;
-  if (typeof text !== "string" || !text.trim())
-    throw new HttpError(
+  if (typeof text !== "string" || !text.trim()) {
+    const error = new HttpError(
       502,
       "模型没有返回可显示的答复，请检查所选协议，或更换可用的对话模型。",
     );
+    const choice = Array.isArray(payload.choices) ? payload.choices[0] : null;
+    const content = choice?.message?.content;
+    error.diagnostic = {
+      protocol: config.protocol,
+      choices: Array.isArray(payload.choices) ? payload.choices.length : null,
+      contentType: content === null ? "null" : Array.isArray(content) ? "array" : typeof content,
+      reasoningOnly: !text && typeof choice?.message?.reasoning_content === "string" && !!choice.message.reasoning_content,
+      finishReason: ["stop", "length", "content_filter", "tool_calls"].includes(choice?.finish_reason) ? choice.finish_reason : null,
+      hasOutput: Array.isArray(payload.output) || typeof payload.output_text === "string",
+      hasError: !!payload.error,
+    };
+    throw error;
+  }
   return text.trim().slice(0, 20000);
 }
 
@@ -488,6 +501,7 @@ export async function createGuardianServer({
         return send(res, error.status, {
           error: error.message,
           ...(error.field ? { field: error.field } : {}),
+          ...(error.diagnostic ? { diagnostic: error.diagnostic } : {}),
         });
       if (["AbortError", "TimeoutError"].includes(error?.name))
         return send(res, 504, {

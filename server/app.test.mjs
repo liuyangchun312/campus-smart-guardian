@@ -257,6 +257,20 @@ test("per-account daily limit blocks upstream calls and survives restart", async
   assert.equal((await f.request("/api/chat", body)).status, 429);
 });
 
+test("empty model replies include safe structural diagnostics for administrators only", async (t) => {
+  const f = await fixture(t);
+  await f.request("/api/ai/connect", f.config);
+  f.rawResponse("application/json", JSON.stringify({ choices: [{ finish_reason: "length", message: { content: null, reasoning_content: "mock-secret-must-not-leak" } }] }));
+  const reply = await f.request("/api/chat", { messages: [{ role: "user", content: "你好" }] });
+  assert.equal(reply.status, 502);
+  assert.equal(reply.body.diagnostic.contentType, "null");
+  assert.equal(reply.body.diagnostic.reasoningOnly, true);
+  assert.equal(reply.body.diagnostic.finishReason, "length");
+  assert.equal(JSON.stringify(reply.body).includes("mock-secret"), false);
+  await f.request("/api/auth/register", { username: "diagnostic_user", name: "诊断用户", password: "diagnostic-user-password" });
+  assert.equal((await f.request("/api/chat", { messages: [{ role: "user", content: "你好" }] })).body.diagnostic, undefined);
+});
+
 test("model redirects are rejected without following or saving the key", async (t) => {
   const f = await fixture(t);
   f.fail(302);
