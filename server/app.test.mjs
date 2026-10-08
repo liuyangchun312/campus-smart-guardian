@@ -164,6 +164,24 @@ test("requests streaming replies from relays whose non-stream mode returns only 
   assert.equal(reply.body.text, "正常模型答复");
 });
 
+test("completed SSE replies return without waiting for the upstream connection to close", { timeout: 2000 }, async (t) => {
+  let cancelled = 0;
+  const f = await fixture(t, { fetchImpl: async (_url, init) => {
+    const responses = "input" in JSON.parse(init.body);
+    const wire = responses
+      ? 'event: response.completed\ndata: {"type":"response.completed","response":{"output_text":"已完成"}}\n\n'
+      : 'data: {"choices":[{"index":0,"delta":{"content":"已完成"}}]}\n\ndata: [DONE]\n\n';
+    return new Response(new ReadableStream({ start(controller) { controller.enqueue(Buffer.from(wire)); }, cancel() { cancelled++; } }), { headers: { "Content-Type": "text/event-stream" } });
+  } });
+  for (const protocol of ["chat", "responses"]) {
+    assert.equal((await f.request("/api/ai/connect", { ...f.config, protocol })).status, 200);
+    const reply = await f.request("/api/chat", { messages: [{ role: "user", content: "你好" }] });
+    assert.equal(reply.status, 200);
+    assert.equal(reply.body.text, "已完成");
+  }
+  assert.equal(cancelled, 4);
+});
+
 test("Responses connection accepts completed SSE response without duplicating deltas", async (t) => {
   const f = await fixture(t);
   f.rawResponse("text/event-stream", 'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"OK"}\n\nevent: response.completed\ndata: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"OK"}]}]}}\n\n');

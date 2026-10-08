@@ -110,28 +110,30 @@ function validateConfig(raw, previous) {
     );
   return { baseUrl, model, protocol, apiKey, enabled: true, verifiedAt: null };
 }
+function decodeEvent(block) {
+  const data = block.split(/\r\n|\r|\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).replace(/^ /, ""))
+    .join("\n");
+  if (!data || data === "[DONE]") return data || null;
+  let event;
+  try { event = JSON.parse(data); }
+  catch { throw new HttpError(502, "模型服务返回的事件流格式不正确，请稍后重试。"); }
+  if (!event || typeof event !== "object" || Array.isArray(event))
+    throw new HttpError(502, "模型服务返回的事件流格式不正确，请稍后重试。");
+  return event;
+}
 function readEventResponse(raw, responses) {
   let text = "";
   let completed = false;
   let result;
   for (const block of raw.replace(/\r\n?/g, "\n").split("\n\n")) {
-    const data = block.split("\n")
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice(5).replace(/^ /, ""))
-      .join("\n");
-    if (!data) continue;
-    if (data === "[DONE]") {
+    const event = decodeEvent(block);
+    if (!event) continue;
+    if (event === "[DONE]") {
       if (!responses) completed = true;
       continue;
     }
-    let event;
-    try {
-      event = JSON.parse(data);
-    } catch {
-      throw new HttpError(502, "模型服务返回的事件流格式不正确，请稍后重试。");
-    }
-    if (!event || typeof event !== "object" || Array.isArray(event))
-      throw new HttpError(502, "模型服务返回的事件流格式不正确，请稍后重试。");
     if (event.error || ["error", "response.failed", "response.incomplete"].includes(event.type))
       throw new HttpError(502, "模型服务在生成答复时返回错误，请检查服务状态、额度或稍后重试。");
     if (responses) {
@@ -155,16 +157,30 @@ async function readResponse(response, responses) {
   const reader = response.body?.getReader();
   if (!reader) throw new HttpError(502, "模型服务未返回内容。");
   let size = 0;
-  // Per-token SSE envelopes are much larger than the equivalent final JSON answer.
-  const limit = response.headers.get("content-type")?.toLowerCase().includes("text/event-stream") ? 4 * 1024 * 1024 : 512 * 1024;
+  let eventStream = response.headers.get("content-type")?.toLowerCase().includes("text/event-stream") ?? false;
+  const decoder = new TextDecoder();
+  let pending = "";
   const chunks = [];
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > limit) throw new HttpError(502, "模型服务返回内容过长。");
+      pending += decoder.decode(value, { stream: true });
+      if (!eventStream && /^\s*(?:data:|event:|:)/.test(pending)) eventStream = true;
+      // Per-token SSE envelopes are much larger than the equivalent final JSON answer.
+      if (size > (eventStream ? 4 * 1024 * 1024 : 512 * 1024)) throw new HttpError(502, "模型服务返回内容过长。");
       chunks.push(Buffer.from(value));
+      if (eventStream) {
+        let terminal = false;
+        let boundary;
+        while ((boundary = /\r?\n\r?\n|\r\r/.exec(pending))) {
+          const event = decodeEvent(pending.slice(0, boundary.index));
+          pending = pending.slice(boundary.index + boundary[0].length);
+          if (event === "[DONE]" ? !responses : event?.error || ["error", "response.failed", "response.incomplete"].includes(event?.type) || responses && event?.type === "response.completed") terminal = true;
+        }
+        if (terminal) break;
+      }
     }
   } finally {
     await reader.cancel().catch(() => {});
