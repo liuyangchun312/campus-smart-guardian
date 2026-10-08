@@ -22,7 +22,7 @@
 - [x] User workflow: add shared statuses/types and canonical order hook; replace manual status controls with submit/confirm/reopen actions; refresh progress and surface request failures.
 - [x] School workflow: add admin repair queue, status/priority/search filters, detail/history, assignee and processing notes.
 - [x] Integration: update overview/export/filter statuses and relevant product copy; preserve legacy records and draft-only deletion.
-- [ ] Verify: full tests/build, real user/admin browser workflow with an isolated database, mobile/theme/layout and error checks. Publish the tested changes to the existing GitHub/Cloudflare targets.
+- [x] Verify: full tests/build, real user/admin browser workflow with an isolated database, mobile/theme/layout and error checks. Publish the tested changes to the existing GitHub/Cloudflare targets.
 
 ## Verification Notes
 
@@ -31,3 +31,6 @@
 - Desktop, 390px dark mobile and 320px overflow checks passed. Browser checks used an isolated database under ignored output/school-workflow-data, without adding production business records.
 - Official-only deep links, canonical JSON backup and legacy imports alongside official orders passed.
 - Independent code review found no actionable issues.
+- Release commit bed2c04 was pushed to GitHub main and codex/workbench-phase-one. Worker version 1b201d15-1daa-4f3c-be23-71bc386ac426 and Pages deployment bc24a1b8 were published successfully.
+- Production homepage matched /assets/index-CzHHMcdi.js; existing administrator login, school queue GET, personal order GET and logout passed. Health remained cloud/ai. No production repair records were created for testing.
+- Original local API restart was blocked by automatic approval policy, which gave no detailed reason. Isolated verification used ports 3002/5174; production deployment was unaffected.
