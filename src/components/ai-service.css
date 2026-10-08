@@ -1,0 +1,16 @@
+.ai-service-section { margin: 28px 0; padding: 24px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.ai-service-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.ai-service-heading h2 { display: flex; align-items: center; gap: 9px; font-size: 18px; }
+.ai-service-routes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-bottom: 22px; }
+.ai-service-routes > div { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
+.ai-service-routes span, .ai-service-metrics span { color: var(--text-secondary); font-size: 12px; }
+.ai-service-routes strong { flex: 1; min-width: 100px; overflow-wrap: anywhere; font-size: 14px; }
+.ai-service-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.ai-service-metrics > div { display: flex; flex-direction: column; gap: 8px; }
+.ai-service-metrics strong { font-size: 22px; }
+.ai-service-section > .account-hint { margin: 18px 0; }
+.ai-service-section > .account-error { margin-bottom: 18px; overflow-wrap: anywhere; }
+.ai-service-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; }
+.ai-service-table th, .ai-service-table td { padding: 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.ai-service-table th { color: var(--text-secondary); font-weight: 500; }
+@media (max-width: 650px) { .ai-service-routes { grid-template-columns: 1fr; gap: 16px; } .ai-service-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

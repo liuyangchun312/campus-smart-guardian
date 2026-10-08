@@ -17,11 +17,12 @@ async function close(server) {
   server.closeAllConnections();
   await new Promise((resolve) => server.close(resolve));
 }
-async function fixture(t, { fetchImpl } = {}) {
+async function fixture(t, { fetchImpl, env = {} } = {}) {
   const dir = await mkdtemp(join(tmpdir(), "guardian-ai-test-"));
   const requests = [];
   let failure = 0;
   let extraResponse = {};
+  let rawResponse;
   const upstream = http.createServer(async (req, res) => {
     let raw = "";
     for await (const chunk of req) raw += chunk;
@@ -31,6 +32,11 @@ async function fixture(t, { fetchImpl } = {}) {
       body: raw ? JSON.parse(raw) : null,
     });
     res.setHeader("Content-Type", "application/json");
+    if (rawResponse) {
+      res.setHeader("Content-Type", rawResponse.type);
+      res.end(rawResponse.body);
+      return;
+    }
     if (failure) {
       if (failure === 302) res.setHeader("Location", "/redirect-target");
       res.writeHead(failure);
@@ -60,7 +66,7 @@ async function fixture(t, { fetchImpl } = {}) {
   });
   const upstreamUrl = await listen(upstream);
   const configFile = join(dir, "ai-config.json");
-  let app = await createGuardianServer({ configFile, env: {}, bootstrapToken: "fixture-admin-setup", fetchImpl });
+  let app = await createGuardianServer({ configFile, env, bootstrapToken: "fixture-admin-setup", fetchImpl, recoveryDelayMs: 0 });
   let appUrl = await listen(app);
   t.after(async () => {
     await close(app);
@@ -111,6 +117,7 @@ async function fixture(t, { fetchImpl } = {}) {
       failure = code;
     },
     responseExtra: (value) => { extraResponse = value; },
+    rawResponse: (type, body) => { rawResponse = { type, body }; },
     restart: async (env) => {
       await close(app);
       app = await createGuardianServer({ configFile, env: env ?? {} });
@@ -132,6 +139,122 @@ test("model connection works with Cloudflare supported redirect modes", async (t
   const chat = await f.request("/api/chat", { messages: [{ role: "user", content: "你好" }] });
   assert.equal(chat.status, 200);
   assert.equal(chat.body.text, "来自模拟 Chat 的答复");
+});
+
+test("chat accepts an upstream SSE reply even when stream false was requested", async (t) => {
+  const f = await fixture(t);
+  await f.request("/api/ai/connect", f.config);
+  f.rawResponse("text/event-stream", ': heartbeat\r\n\r\ndata: {"choices":[{"index":0,"delta":{"content":"你好"}}]}\r\n\r\ndata: {"choices":[{"index":0,"delta":{"content":"，校园"}}]}\r\n\r\ndata: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\r\n\r\ndata: [DONE]\r\n\r\n');
+  const reply = await f.request("/api/chat", { messages: [{ role: "user", content: "你好" }] });
+  assert.equal(reply.status, 200);
+  assert.equal(reply.body.text, "你好，校园");
+  assert.equal(f.requests.at(-1).body.stream, false);
+});
+
+test("Responses connection accepts completed SSE response without duplicating deltas", async (t) => {
+  const f = await fixture(t);
+  f.rawResponse("text/event-stream", 'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"OK"}\n\nevent: response.completed\ndata: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"OK"}]}]}}\n\n');
+  const result = await f.request("/api/ai/connect", { ...f.config, protocol: "responses" });
+  assert.equal(result.status, 200);
+  assert.equal(result.body.mode, "ai");
+});
+
+test("HTML upstream replies report gateway failure without exposing response body", async (t) => {
+  const f = await fixture(t);
+  f.rawResponse("text/html", "<!doctype html><html>mock-secret-must-not-leak</html>");
+  const result = await f.request("/api/ai/connect", f.config);
+  assert.equal(result.status, 502);
+  assert.match(result.body.error, /HTML/);
+  assert.equal(JSON.stringify(result.body).includes("mock-secret"), false);
+  assert.equal((await f.request("/api/health")).body.mode, "local");
+});
+
+test("incomplete and failed SSE replies never return a partial answer or leak upstream errors", async (t) => {
+  const f = await fixture(t);
+  await f.request("/api/ai/connect", f.config);
+  for (const body of [
+    'data: {"choices":[{"index":0,"delta":{"content":"partial"}}]}\n\n',
+    'data: {"error":{"message":"mock-secret-must-not-leak"}}\n\ndata: [DONE]\n\n',
+    'event: response.failed\ndata: {"type":"response.failed","response":{"error":{"message":"mock-secret-must-not-leak"}}}\n\n',
+  ]) {
+    f.rawResponse("text/event-stream", body);
+    const reply = await f.request("/api/chat", { messages: [{ role: "user", content: "你好" }] });
+    assert.equal(reply.status, 502);
+    assert.equal(reply.body.text, undefined);
+    assert.equal(JSON.stringify(reply.body).includes("mock-secret"), false);
+  }
+});
+
+test("malformed, empty and oversized model responses are rejected safely", async (t) => {
+  const f = await fixture(t);
+  await f.request("/api/ai/connect", f.config);
+  for (const [type, body, message] of [
+    ["application/json", "", /空响应/],
+    ["application/json", "null", /响应格式/],
+    ["application/json", "mock-secret-must-not-leak", /响应格式/],
+    ["text/event-stream", 'data: invalid-mock-secret\n\ndata: [DONE]\n\n', /事件流格式/],
+    ["text/event-stream", `data: ${"x".repeat(512 * 1024)}\n\n`, /内容过长/],
+  ]) {
+    f.rawResponse(type, body);
+    const reply = await f.request("/api/chat", { messages: [{ role: "user", content: "你好" }] });
+    assert.equal(reply.status, 502);
+    assert.match(reply.body.error, message);
+    assert.equal(JSON.stringify(reply.body).includes("mock-secret"), false);
+  }
+});
+
+test("backup connection is tested, private, persistent and used on primary permission failure", async (t) => {
+  const f = await fixture(t, { fetchImpl: (url, init) => JSON.parse(init.body).model === "backup-model"
+    ? Promise.resolve(Response.json({ choices: [{ message: { content: "备用服务答复" } }] }))
+    : fetch(url, init) });
+  await f.request("/api/ai/connect", f.config);
+  const connected = await f.request("/api/ai/backup/connect", { ...f.config, model: "backup-model", apiKey: "backup-secret" });
+  assert.equal(connected.status, 200);
+  assert.equal(connected.body.model, "test-chat");
+  assert.equal(connected.body.backup.model, "backup-model");
+  assert.equal(JSON.stringify(connected.body).includes("backup-secret"), false);
+  f.fail(401);
+  const reply = await f.request("/api/chat", { messages: [{ role: "user", content: "你好" }] });
+  assert.equal(reply.status, 200);
+  assert.equal(reply.body.text, "备用服务答复");
+  assert.equal(reply.body.model, "backup-model");
+  const stats = await f.request("/api/ai/status");
+  assert.equal(stats.body.fallback, 1);
+  assert.equal(stats.body.success, 1);
+  assert.match(stats.body.lastIssue.issue, /密钥|权限/);
+  assert.equal(JSON.stringify(stats.body).includes("mock-secret"), false);
+  await f.restart();
+  assert.equal((await f.request("/api/ai/config")).body.backup.model, "backup-model");
+  await f.request("/api/ai/backup/disconnect", {});
+  assert.equal((await f.request("/api/ai/config")).body.backup.enabled, false);
+  assert.equal((await readFile(f.configFile, "utf8")).includes("backup-secret"), false);
+});
+
+test("ordinary users receive safe failures and cannot view AI monitoring or settings", async (t) => {
+  const f = await fixture(t);
+  await f.request("/api/ai/connect", f.config);
+  await f.request("/api/auth/register", { username: "consult_user", name: "咨询用户", password: "consult-test-password" });
+  for (const path of ["/api/ai/status", "/api/ai/config"]) assert.equal((await f.request(path)).status, 403);
+  assert.equal((await f.request("/api/ai/backup/connect", f.config)).status, 403);
+  f.fail(401);
+  const reply = await f.request("/api/chat", { messages: [{ role: "user", content: "你好" }] });
+  assert.equal(reply.status, 503);
+  assert.match(reply.body.error, /服务暂时/);
+  assert.equal(reply.body.error.includes("密钥"), false);
+});
+
+test("per-account daily limit blocks upstream calls and survives restart", async (t) => {
+  const f = await fixture(t, { env: { AI_DAILY_LIMIT: "1" } });
+  await f.request("/api/ai/connect", f.config);
+  const body = { messages: [{ role: "user", content: "你好" }] };
+  assert.equal((await f.request("/api/chat", body)).status, 200);
+  const calls = f.requests.length;
+  const limited = await f.request("/api/chat", body);
+  assert.equal(limited.status, 429);
+  assert.match(limited.body.error, /今日/);
+  assert.equal(f.requests.length, calls);
+  await f.restart({ AI_DAILY_LIMIT: "1" });
+  assert.equal((await f.request("/api/chat", body)).status, 429);
 });
 
 test("model redirects are rejected without following or saving the key", async (t) => {

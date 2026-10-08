@@ -7,6 +7,7 @@ export type Message = {
   content: string;
   mode?: "local" | "ai" | "fallback" | "error";
   model?: string;
+  errorCode?: number;
   topic?: "rights" | "repair" | "safety" | "general";
   identity?: "worker" | "student" | "other";
   sources?: EvidenceSource[];

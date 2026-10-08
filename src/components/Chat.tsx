@@ -11,11 +11,14 @@ import {
   Sparkles,
   Sprout,
   Wrench,
+  RefreshCw,
+  CircleHelp,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import type { Message } from "../types";
 import { RetrievedSources } from "./Knowledge";
+import { consultationError, retryQuestion } from "../lib/consultation";
 
 export default function Chat({
   messages,
@@ -26,6 +29,9 @@ export default function Chat({
   ask,
   reset,
   onRepair,
+  admin,
+  onRetry,
+  onHelp,
 }: {
   messages: Message[];
   loading: boolean;
@@ -35,6 +41,9 @@ export default function Chat({
   ask: (value: string, identity?: Message["identity"]) => void;
   reset: () => void;
   onRepair: () => void;
+  admin: boolean;
+  onRetry: (errorId: string) => void;
+  onHelp: () => void;
 }) {
   const [input, setInput] = useState("");
   const [identity, setIdentity] = useState(() => {
@@ -108,8 +117,8 @@ export default function Chat({
               <span>
                 <i className="green-dot" />
                 {mode === "ai"
-                  ? `AI · ${model || "已配置模型"}`
-                  : "尚未连接 AI · 本地参考问答"}
+                  ? admin ? `AI · ${model || "已配置模型"}` : "智能咨询 · 已启用"
+                  : "本地参考问答"}
               </span>
             </div>
           </div>
@@ -122,14 +131,13 @@ export default function Chat({
           <div className="ai-chat-banner">
             <PlugZap size={20} />
             <div>
-              <strong>连接模型，即可自由提问</strong>
+              <strong>智能咨询尚未启用</strong>
               <p>
-                当前提供本地参考指引与资料检索。由管理员配置 AI 服务
-                后，小护将结合问题、上下文和匹配资料生成回答。
+                当前提供本地参考指引，AI 服务由管理员统一开通。
               </p>
             </div>
-            <button onClick={onAiSettings}>
-              连接 AI
+            <button onClick={admin ? onAiSettings : onHelp}>
+              {admin ? "配置 AI 服务" : "联系管理员"}
               <ArrowUpRight size={15} />
             </button>
           </div>
@@ -204,7 +212,7 @@ export default function Chat({
                           ),
                         }}
                       >
-                        {message.content}
+                        {message.mode === "error" ? consultationError(message, admin) : message.content}
                       </ReactMarkdown>
                     </div>
                   ) : (
@@ -218,21 +226,26 @@ export default function Chat({
                   <div className="message-actions">
                     <span>
                       {message.mode === "ai"
-                        ? `AI 生成${message.model ? ` · ${message.model}` : ""}`
+                        ? `AI 生成${admin && message.model ? ` · ${message.model}` : ""}`
                         : message.mode === "error"
-                          ? "模型请求未成功 · 请检查连接"
+                          ? "本次咨询未完成"
                           : message.mode === "fallback"
                             ? "AI 暂不可用 · 已使用本地参考指引"
                             : "本地知识指引 · 请核实个案适用性"}
                     </span>
                     {message.mode === "error" && (
+                      <>
+                      {retryQuestion(messages, message.id) && <button disabled={loading} onClick={() => onRetry(message.id)}><RefreshCw size={14} />重新发送</button>}
+                      {admin ?
                       <button onClick={onAiSettings}>
                         <PlugZap size={14} />
                         AI 连接设置
                       </button>
+                      : <button onClick={onHelp}><CircleHelp size={14} />联系管理员</button>}
+                      </>
                     )}
                     <button
-                      onClick={() => void copy(message)}
+                      onClick={() => void copy(message.mode === "error" ? { ...message, content: consultationError(message, admin) } : message)}
                       aria-label="复制这条答复"
                     >
                       {copied === message.id ? (

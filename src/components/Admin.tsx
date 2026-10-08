@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { RefreshCw, Search, ShieldCheck, Users, PlugZap } from "lucide-react";
 import { api, type Account } from "../lib/api";
 import SchoolOrderQueue from "./SchoolOrderQueue";
+import AiServiceStatus from "./AiServiceStatus";
 type ManagedUser = Account & { orderCount: number; inspectionCount: number };
-export default function Admin({ onAiSettings }: { onAiSettings: () => void }) {
+export default function Admin({ onAiSettings, onBackupSettings }: { onAiSettings: () => void; onBackupSettings: () => void }) {
   const [users, setUsers] = useState<ManagedUser[]>([]); const [query, setQuery] = useState("");
   const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
   const load = useCallback(async () => { setBusy(true); setError(""); try { setUsers((await api<{ users: ManagedUser[] }>("/api/admin/users")).users); } catch (e) { setError(e instanceof Error ? e.message : "无法加载账号列表。"); } finally { setBusy(false); } }, []);
@@ -14,5 +15,17 @@ export default function Admin({ onAiSettings }: { onAiSettings: () => void }) {
     try { await api(`/api/admin/users/${encodeURIComponent(user.id)}`, { disabled: !user.disabled }, "PATCH"); await load(); } catch (e) { setError(e instanceof Error ? e.message : "操作失败。"); setBusy(false); }
   };
   const visible = users.filter((user) => `${user.username} ${user.name}`.toLowerCase().includes(query.toLowerCase().trim()));
-  return <div className="admin-page page-enter"><div className="page-heading"><div><span className="eyebrow">校方管理</span><h1>学校服务管理 <ShieldCheck size={25} /></h1><p>受理用户报修、安排维修并跟进完成情况。</p></div><button className="button primary small" onClick={onAiSettings}><PlugZap size={16} />配置 AI 服务</button></div><SchoolOrderQueue /><div className="admin-metrics">{[{ label: "账号总数", value: users.length }, { label: "正常使用", value: users.filter((u) => !u.disabled).length }, { label: "已停用", value: users.filter((u) => u.disabled).length }, { label: "管理员", value: users.filter((u) => u.role === "admin").length }].map((item) => <div key={item.label}><span>{item.label}</span><strong>{error ? "—" : busy && !users.length ? "…" : item.value}</strong></div>)}</div><section className="admin-register panel"><div className="admin-toolbar"><h2><Users size={19} />用户管理</h2><label className="search-field"><Search size={17} /><input aria-label="搜索用户" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索账号或姓名" /></label><button className="button outline small" disabled={busy} onClick={() => void load()}><RefreshCw size={15} />刷新</button></div>{error && <p className="account-error" role="alert">{error}</p>}<div className="admin-table-wrap"><table><thead><tr><th>用户</th><th>角色</th><th>状态</th><th>记录数量</th><th>注册日期</th><th>操作</th></tr></thead><tbody>{visible.map((user) => <tr key={user.id}><td><strong>{user.name}</strong><small>@{user.username}</small></td><td>{user.role === "admin" ? "校方管理员" : "普通用户"}</td><td><span className={`account-status ${user.disabled ? "disabled" : ""}`}>{user.disabled ? "已停用" : "正常"}</span></td><td>{user.orderCount} 个人工单 · {user.inspectionCount} 巡检</td><td>{new Date(user.createdAt).toLocaleDateString("zh-CN")}</td><td>{user.role === "admin" ? <span className="account-hint">受保护账号</span> : <button className="button outline small" disabled={busy} onClick={() => void toggle(user)}>{user.disabled ? "启用账号" : "停用账号"}</button>}</td></tr>)}</tbody></table></div>{!visible.length && !busy && !error && <p className="admin-empty">没有符合条件的用户。</p>}<p className="account-hint">账号停用会撤销已有会话，重新启用后需再次登录。此处不展示用户的私人咨询内容。</p></section></div>;
+  return <div className="admin-page page-enter">
+    <div className="page-heading"><div><span className="eyebrow">校方管理</span><h1>学校服务管理 <ShieldCheck size={25} /></h1><p>受理用户报修、安排维修并跟进完成情况。</p></div><button className="button primary small" onClick={onAiSettings}><PlugZap size={16} />配置 AI 服务</button></div>
+    <SchoolOrderQueue />
+    <AiServiceStatus onSettings={onAiSettings} onBackupSettings={onBackupSettings} />
+    <div className="admin-metrics">{[{ label: "账号总数", value: users.length }, { label: "正常使用", value: users.filter((u) => !u.disabled).length }, { label: "已停用", value: users.filter((u) => u.disabled).length }, { label: "管理员", value: users.filter((u) => u.role === "admin").length }].map((item) => <div key={item.label}><span>{item.label}</span><strong>{error ? "—" : busy && !users.length ? "…" : item.value}</strong></div>)}</div>
+    <section className="admin-register panel">
+      <div className="admin-toolbar"><h2><Users size={19} />用户管理</h2><label className="search-field"><Search size={17} /><input aria-label="搜索用户" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索账号或姓名" /></label><button className="button outline small" disabled={busy} onClick={() => void load()}><RefreshCw size={15} />刷新</button></div>
+      {error && <p className="account-error" role="alert">{error}</p>}
+      <div className="admin-table-wrap"><table><thead><tr><th>用户</th><th>角色</th><th>状态</th><th>记录数量</th><th>注册日期</th><th>操作</th></tr></thead><tbody>{visible.map((user) => <tr key={user.id}><td><strong>{user.name}</strong><small>@{user.username}</small></td><td>{user.role === "admin" ? "校方管理员" : "普通用户"}</td><td><span className={`account-status ${user.disabled ? "disabled" : ""}`}>{user.disabled ? "已停用" : "正常"}</span></td><td>{user.orderCount} 个人工单 · {user.inspectionCount} 巡检</td><td>{new Date(user.createdAt).toLocaleDateString("zh-CN")}</td><td>{user.role === "admin" ? <span className="account-hint">受保护账号</span> : <button className="button outline small" disabled={busy} onClick={() => void toggle(user)}>{user.disabled ? "启用账号" : "停用账号"}</button>}</td></tr>)}</tbody></table></div>
+      {!visible.length && !busy && !error && <p className="admin-empty">没有符合条件的用户。</p>}
+      <p className="account-hint">账号停用会撤销已有会话，重新启用后需再次登录。此处不展示用户的私人咨询内容。</p>
+    </section>
+  </div>;
 }

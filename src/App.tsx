@@ -35,6 +35,7 @@ import { isInspections, type Inspection } from "./lib/safety";
 import { knowledgeSources, retrieveEvidence } from "../shared/knowledge.mjs";
 import type { EvidenceSource } from "../shared/knowledge.mjs";
 import { getLocalReply } from "./lib/advisor";
+import { retryQuestion } from "./lib/consultation";
 import { useStoredState } from "./lib/storage";
 import type { Message, Page, WorkOrder } from "./types";
 import { parseWorkspaceRoute, workspaceHash, type InspectionViewState, type OrdersViewState, type WorkspaceRoute } from "./lib/navigation";
@@ -146,6 +147,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
   const [tool, setTool] = useState<string | null>(null);
   const [mode, setMode] = useState<"local" | "ai">("local");
   const [aiModel, setAiModel] = useState("");
+  const [aiSettingsTarget, setAiSettingsTarget] = useState<"primary" | "backup">("primary");
   const [aiSettingsOpen, setAiSettingsOpen] = useState(
     () => user.role === "admin" && new URLSearchParams(window.location.search).get("setup") === "ai",
   );
@@ -161,20 +163,25 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
   const draftCount = orders.filter((order) => order.status === "draft").length;
   useEffect(() => {
     const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 4000);
-    apiFetch("/api/health", { signal: controller.signal })
+    const refresh = () => {
+    if (document.hidden) return;
+    apiFetch("/api/health", { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(4000)]) })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.mode === "ai") {
-          setMode("ai");
+        if (data?.mode === "ai" || data?.mode === "local") {
+          setMode(data.mode);
           setAiModel(data.model || "");
         }
       })
-      .catch(() => {})
-      .finally(() => window.clearTimeout(timer));
+      .catch(() => {});
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
     return () => {
       controller.abort();
-      window.clearTimeout(timer);
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
     };
   }, []);
   useEffect(() => {
@@ -239,7 +246,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
     toastTimer.current = window.setTimeout(() => setToast(""), 4200);
   };
   const openAiSettings = () => {
-    if (user.role === "admin") setAiSettingsOpen(true);
+    if (user.role === "admin") { setAiSettingsTarget("primary"); setAiSettingsOpen(true); }
     else notify("AI 服务由管理员统一配置，请联系管理员启用或检查连接。");
   };
   const signOut = async () => {
@@ -313,7 +320,9 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
     setInspectionView(next);
     clearRouteFilter();
   };
-  const ask = async (input: string, identity?: Message["identity"]) => {
+  const ask = async (input: string, identity?: Message["identity"], retryId?: string) => {
+    const retry = retryId ? retryQuestion(messages, retryId) : null;
+    if (retryId && !retry) return;
     const text = input.trim().slice(0, 2100);
     if (!text || busyRef.current) return;
     busyRef.current = true;
@@ -331,27 +340,30 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
       message.identity
         ? `【当前自选身份：${identityLabels[message.identity]}】\n${message.content}`
         : message.content;
-    const history = messages
+    const preceding = retry?.history ?? messages;
+    const history = preceding
       .slice(-10)
       .map((message) => ({ role: message.role, content: message.content }));
-    const aiHistory = messages
+    const aiHistory = preceding
       .filter((message) => message.mode !== "error")
       .slice(-10)
       .map((message) => ({
         role: message.role,
         content: contentWithIdentity(message).slice(0, 2500),
       }));
-    const userMessage: Message = {
+    const userMessage: Message = retry?.question ?? {
       id: crypto.randomUUID(),
       role: "user",
       content: text,
       identity,
     };
-    setMessages((previous) => [...previous, userMessage].slice(-80));
+    setMessages((previous) => retryId ? previous.filter(message => message.id !== retryId) : [...previous, userMessage].slice(-80));
     const local = getLocalReply(text, history, identity);
     let answer = local.text;
     let answerMode: Message["mode"] = "local";
     let sources = retrieveEvidence(text);
+    let replyModel = aiModel;
+    let errorCode: number | undefined;
     try {
       if (mode === "ai") {
         const controller = new AbortController();
@@ -368,12 +380,13 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
             }),
             signal: controller.signal,
           });
-          const data: unknown = await response.json();
+          const data: unknown = await response.json().catch(() => null);
           if (!response.ok)
-            throw new Error(
+            throw new ApiError(
               isRecord(data) && typeof data.error === "string"
                 ? data.error
                 : "AI 服务暂不可用，请检查连接设置。",
+              response.status,
             );
           if (
             !isRecord(data) ||
@@ -382,6 +395,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
           )
             throw new Error("Invalid response");
           answer = data.text.slice(0, 40000);
+          if (typeof data.model === "string") replyModel = data.model;
           sources = isEvidenceSources(data.sources)
             ? data.sources.map((source) => knowledgeSources.find((known) => known.id === source.id)!).filter(Boolean)
             : [];
@@ -389,17 +403,21 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
         } catch (error) {
           answerMode = "error";
           sources = [];
-          answer = `**这次未收到模型答复。**\n\n${controller.signal.aborted ? "模型响应超时，请稍后重试或更换模型。" : error instanceof Error && error.message !== "Failed to fetch" ? error.message : "无法连接本机服务，请检查服务是否运行。"}\n\n可以打开“AI 连接设置”检查令牌、额度、模型和接口协议，再重新发送问题。`;
+          errorCode = error instanceof ApiError ? error.status : undefined;
+          answer = user.role === "admin"
+            ? `**本次咨询未完成。**\n\n${controller.signal.aborted ? "模型服务响应超时。" : error instanceof Error && error.message !== "Failed to fetch" ? error.message : "无法连接咨询服务。"}\n\n问题已保留，可重新发送；请在管理控制台查看 AI 服务状态。`
+            : error instanceof ApiError && [401, 429].includes(error.status) ? error.message : "智能咨询服务暂时繁忙，问题已保留，请稍后重新发送。";
         } finally {
           window.clearTimeout(timer);
         }
       } else await new Promise((resolve) => window.setTimeout(resolve, 420));
       const reply: Message = {
-        id: crypto.randomUUID(),
+        id: retryId ?? crypto.randomUUID(),
         role: "assistant",
         content: answer,
         mode: answerMode,
-        ...(answerMode === "ai" ? { model: aiModel } : {}),
+        ...(answerMode === "ai" ? { model: replyModel } : {}),
+        ...(errorCode ? { errorCode } : {}),
         topic: local.topic,
         sources,
       };
@@ -528,7 +546,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
             className="nav-item"
             onClick={() => {
               setMenuOpen(false);
-              setAiSettingsOpen(true);
+              openAiSettings();
             }}
           >
             <PlugZap size={19} strokeWidth={1.7} />
@@ -582,7 +600,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
             <ThemeControl />
             {user.role === "admin" && <button
               className={`ai-connect-button ${mode === "ai" ? "connected" : ""}`}
-              onClick={() => setAiSettingsOpen(true)}
+              onClick={openAiSettings}
               aria-label="打开 AI 连接设置"
             >
               <PlugZap size={15} />
@@ -634,9 +652,12 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
           {page === "safety" && <Safety inspections={inspections} onChange={setInspections} notify={notify} selectedId={route.recordId ?? null} onSelect={selectRecord} view={inspectionView} onViewChange={changeInspectionView} />}
           {page === "knowledge" && <Knowledge ask={(value) => void ask(value)} />}
           {page === "research" && <Research navigate={navigate} notify={notify} />}
-          {page === "admin" && user.role === "admin" && <Admin onAiSettings={openAiSettings} />}
+          {page === "admin" && user.role === "admin" && <Admin onAiSettings={openAiSettings} onBackupSettings={() => { setAiSettingsTarget("backup"); setAiSettingsOpen(true); }} />}
           {page === "chat" && (
             <Chat
+              admin={user.role === "admin"}
+              onRetry={(errorId) => { const retry = retryQuestion(messages, errorId); if (retry) void ask(retry.question.content, retry.question.identity, errorId); }}
+              onHelp={() => setTool("help")}
               messages={messages}
               loading={loading}
               mode={mode}
@@ -692,6 +713,8 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
       {accountOpen && <AccountPanel user={user} onClose={() => setAccountOpen(false)} signOut={signOut} importLegacy={importLegacy} download={() => workspace.download(orders)} notify={notify} />}
       {aiSettingsOpen && user.role === "admin" && (
         <AiSettings
+          key={aiSettingsTarget}
+          target={aiSettingsTarget}
           onClose={() => {
             setAiSettingsOpen(false);
             const url = new URL(window.location.href);

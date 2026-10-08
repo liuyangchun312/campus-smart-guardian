@@ -204,5 +204,5 @@ export async function createAccounts({ file, bootstrapToken, send, readJson, dat
     }
     throw new AccountError(405, "此接口不支持当前请求方式。");
   }
-  return { handle, currentUser, requireAdmin, close: () => { if (!database) db.close(); } };
+  return { handle, currentUser, requireAdmin, database: db, transaction, close: () => { if (!database) db.close(); } };
 }

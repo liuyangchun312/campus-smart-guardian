@@ -29,11 +29,15 @@ const DEFAULT_MODEL = "deepseek-v4.1-flash";
 export default function AiSettings({
   onClose,
   onChange,
+  target = "primary",
 }: {
   onClose: () => void;
   onChange: (mode: "local" | "ai", model: string) => void;
+  target?: "primary" | "backup";
 }) {
   const [config, setConfig] = useState<PublicConfig | null>(null);
+  const backup = target === "backup";
+  const endpoint = backup ? "/api/ai/backup" : "/api/ai";
   const [baseUrl, setBaseUrl] = useState(RELAY_URL);
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [protocol, setProtocol] = useState<"chat" | "responses">("chat");
@@ -49,7 +53,7 @@ export default function AiSettings({
     value
       .trim()
       .replace(/\/+$/, "")
-      .replace(/\/chat\/completions$/, "");
+      .replace(/\/(?:chat\/completions|responses)$/, "");
   const canReuseKey =
     !!config?.hasKey && canonical(baseUrl) === canonical(config.baseUrl);
   useEffect(() => {
@@ -59,8 +63,9 @@ export default function AiSettings({
     apiFetch("/api/ai/config", { signal: pending.signal })
       .then(async (response) => {
         if (!response.ok)
-          throw new Error("无法读取 AI 设置，请确认本机服务已启动后重新打开。");
-        const data: PublicConfig = await response.json();
+          throw new Error("无法读取 AI 设置，请稍后重新打开。");
+        const saved: PublicConfig & { backup: PublicConfig } = await response.json();
+        const data = backup ? saved.backup : saved;
         if (!active) return;
         setConfig(data);
         setError("");
@@ -72,7 +77,7 @@ export default function AiSettings({
         if (!active) return;
         if (!pending.signal.aborted)
           setError(reason instanceof Error ? reason.message : "无法读取设置");
-        else setError("读取设置超时，请确认本机服务已启动。");
+        else setError("读取设置超时，请检查网络连接。");
       })
       .finally(() => {
         window.clearTimeout(timer);
@@ -95,7 +100,7 @@ export default function AiSettings({
     controller.current = pending;
     const timer = window.setTimeout(() => pending.abort(), 20000);
     try {
-      const response = await apiFetch("/api/ai/connect", {
+      const response = await apiFetch(`${endpoint}/connect`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -116,9 +121,10 @@ export default function AiSettings({
             ? data.error
             : "连接失败，请核对密钥、地址及模型名称。",
         );
-      if (data.mode !== "ai" || !data.enabled || !data.verifiedAt)
+      const tested = backup ? data.backup : data;
+      if (data.mode !== "ai" || !tested?.enabled || !tested?.verifiedAt)
         throw new Error("服务没有返回连接成功确认，请重试。");
-      setConfig(data);
+      setConfig(backup ? data.backup : data);
       setApiKey("");
       setShowKey(false);
       setSuccess(true);
@@ -146,7 +152,7 @@ export default function AiSettings({
     controller.current = pending;
     const timer = window.setTimeout(() => pending.abort(), 5000);
     try {
-      const response = await apiFetch("/api/ai/disconnect", {
+      const response = await apiFetch(`${endpoint}/disconnect`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -157,9 +163,9 @@ export default function AiSettings({
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "停用失败，请重试。");
-      setConfig(data);
+      setConfig(backup ? data.backup : data);
       setApiKey("");
-      onChange("local", "");
+      onChange(data.mode, data.model ?? "");
     } catch (reason) {
       setError(
         reason instanceof Error && reason.name !== "AbortError"
@@ -174,7 +180,7 @@ export default function AiSettings({
   };
   return (
     <Modal
-      title="连接 AI 问答"
+      title={backup ? "备用 AI 服务" : "平台 AI 服务"}
       onClose={() => {
         if (!busy || busy === "load") onClose();
       }}
@@ -184,8 +190,8 @@ export default function AiSettings({
           <PlugZap size={26} />
         </span>
         <div>
-          <h3>连接 AHHil_AI 中转站</h3>
-          <p>让模型结合您的问题和上下文生成回答，支持自由提问与追问。</p>
+          <h3>{backup ? "配置备用模型服务" : "统一提供智能咨询"}</h3>
+          <p>{backup ? "主服务无法回答时，咨询将自动转交给已测试的备用服务。" : "为全站用户配置模型服务。"}</p>
         </div>
       </div>
       <ol className="ai-setup-steps">
@@ -253,7 +259,7 @@ export default function AiSettings({
           </div>
           <p className="field-help">
             <ShieldCheck size={13} />{" "}
-            密钥只保存在本机后端配置文件，不存入浏览器；仅发给您设置的模型服务。
+            密钥仅保存在服务端，不存入浏览器；仅发给您配置的模型服务。
           </p>
           <label className="field-label" htmlFor="ai-base-url">
             服务地址
@@ -350,7 +356,7 @@ export default function AiSettings({
           <div className="ai-connection-success" role="status">
             <CheckCircle2 size={20} />
             <div>
-              <strong>连接测试成功，AI 问答已启用</strong>
+              <strong>{backup ? "备用服务已通过测试并启用" : "连接测试成功，AI 问答已启用"}</strong>
               <p>
                 当前模型：{config?.model}。关闭窗口后就可以开始提问，无需重启。
               </p>
@@ -377,7 +383,7 @@ export default function AiSettings({
           ) : (
             <>
               <PlugZap size={17} />
-              测试连接并启用 AI
+              {backup ? "测试并启用备用服务" : "测试连接并启用 AI"}
             </>
           )}
         </button>
@@ -401,7 +407,7 @@ export default function AiSettings({
             onClick={() => void disconnect()}
           >
             <Unplug size={14} />
-            {busy === "disconnect" ? "正在停用…" : "停用 AI 连接"}
+            {busy === "disconnect" ? "正在停用…" : backup ? "停用备用服务" : "停用 AI 连接"}
           </button>
         )}
       </div>

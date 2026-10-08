@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { SYSTEM_PROMPT } from "./prompt.mjs";
 import { retrieveEvidence, formatEvidenceContext } from "../shared/knowledge.mjs";
 import { createAccounts, AccountError } from "./accounts.mjs";
+import { createAiRuntime, recoverModel } from "./ai-runtime.mjs";
 
 const defaultConfigFile = import.meta.url
   ? fileURLToPath(new URL("../.guardian/ai-config.json", import.meta.url))
@@ -109,7 +110,48 @@ function validateConfig(raw, previous) {
     );
   return { baseUrl, model, protocol, apiKey, enabled: true, verifiedAt: null };
 }
-async function readResponse(response) {
+function readEventResponse(raw, responses) {
+  let text = "";
+  let completed = false;
+  let result;
+  for (const block of raw.replace(/\r\n?/g, "\n").split("\n\n")) {
+    const data = block.split("\n")
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).replace(/^ /, ""))
+      .join("\n");
+    if (!data) continue;
+    if (data === "[DONE]") {
+      if (!responses) completed = true;
+      continue;
+    }
+    let event;
+    try {
+      event = JSON.parse(data);
+    } catch {
+      throw new HttpError(502, "模型服务返回的事件流格式不正确，请稍后重试。");
+    }
+    if (!event || typeof event !== "object" || Array.isArray(event))
+      throw new HttpError(502, "模型服务返回的事件流格式不正确，请稍后重试。");
+    if (event.error || ["error", "response.failed", "response.incomplete"].includes(event.type))
+      throw new HttpError(502, "模型服务在生成答复时返回错误，请检查服务状态、额度或稍后重试。");
+    if (responses) {
+      // Use the completed response, which includes all output blocks, only once.
+      if (event.type === "response.completed" && event.response) {
+        result = event.response;
+        completed = true;
+      }
+    } else {
+      const choice = event.choices?.find((item) => (item.index ?? 0) === 0);
+      if (typeof choice?.delta?.content === "string") text += choice.delta.content;
+      if (typeof choice?.message?.content === "string") text = choice.message.content;
+      if (choice?.finish_reason != null) completed = true;
+    }
+  }
+  if (!completed)
+    throw new HttpError(502, "模型服务的事件流未完整结束，请重新发送问题。");
+  return responses ? result : { choices: [{ message: { content: text } }] };
+}
+async function readResponse(response, responses) {
   const reader = response.body?.getReader();
   if (!reader) throw new HttpError(502, "模型服务未返回内容。");
   let size = 0;
@@ -125,13 +167,21 @@ async function readResponse(response) {
   } finally {
     await reader.cancel().catch(() => {});
   }
+  const raw = Buffer.concat(chunks).toString("utf8").replace(/^\uFEFF/, "").trim();
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  if (!raw) throw new HttpError(502, "模型服务返回了空响应，请稍后重试。");
+  if (contentType.includes("text/html") || /^<(?:!doctype\s+html|html)\b/i.test(raw))
+    throw new HttpError(502, "模型服务返回了 HTML 网页，可能是 API 地址错误或中转站网关异常，请检查服务地址及服务状态。", "baseUrl");
+  if (contentType.includes("text/event-stream") || /^(?:data:|event:|:)/.test(raw))
+    return readEventResponse(raw, responses);
   try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const payload = JSON.parse(raw);
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error();
+    return payload;
   } catch {
     throw new HttpError(
       502,
-      "模型服务返回的不是 JSON，请核对 API 地址和协议。",
-      "baseUrl",
+      "模型服务返回了无法识别的响应格式，请检查中转站服务状态、API 地址和接口协议。",
     );
   }
 }
@@ -173,7 +223,7 @@ function validateMessages(body) {
     throw new HttpError(400, "最后一条消息必须来自用户。");
   return messages;
 }
-async function callModel(config, messages, probe, fetchImpl, sources = []) {
+async function callModel(config, messages, probe, fetchImpl, sources = [], signal) {
   const responses = config.protocol === "responses";
   const endpoint = `${config.baseUrl}/${responses ? "responses" : "chat/completions"}`;
   const instructions = probe ? "Reply only OK." : `${SYSTEM_PROMPT}\n\n${formatEvidenceContext(sources)}`;
@@ -199,11 +249,12 @@ async function callModel(config, messages, probe, fetchImpl, sources = []) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
       Authorization: `Bearer ${config.apiKey}`,
       "User-Agent": "CampusGuardian/1.0",
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(probe ? 18000 : 45000),
+    signal: signal ?? AbortSignal.timeout(probe ? 18000 : 45000),
     redirect: "manual",
   });
   // Workers only supports manual/follow; never forward a model key to a redirect target.
@@ -243,7 +294,7 @@ async function callModel(config, messages, probe, fetchImpl, sources = []) {
       );
     throw new HttpError(502, "中转站或上游模型暂不可用，请稍后重试。");
   }
-  const payload = await readResponse(response);
+  const payload = await readResponse(response, responses);
   const text = responses
     ? typeof payload.output_text === "string"
       ? payload.output_text
@@ -273,8 +324,10 @@ export async function createGuardianServer({
   secureCookies = false,
   requestAllowed = isLocal,
   clientAddress,
+  recoveryDelayMs = 300,
 } = {}) {
   const accounts = await createAccounts({ file: databaseFile, bootstrapToken, send, readJson, database, secureCookies, clientAddress });
+  const runtime = createAiRuntime(accounts.database, accounts.transaction, { dailyLimit: env.AI_DAILY_LIMIT });
   let config = null;
   let source = "none";
   try {
@@ -286,6 +339,10 @@ export async function createGuardianServer({
         ...validateConfig(saved),
         verifiedAt: saved.verifiedAt ?? null,
       };
+    if (config && saved.backup?.enabled) {
+      try { config.backup = { ...validateConfig(saved.backup), verifiedAt: saved.backup.verifiedAt ?? null }; }
+      catch { /* An invalid backup must not disable the primary service. */ }
+    }
   } catch (error) {
     if (error.code === "ENOENT") {
       try {
@@ -319,6 +376,8 @@ export async function createGuardianServer({
   let concurrent = 0;
   let configuring = false;
   const recent = [];
+  const visibleConfig = () => ({ ...publicConfig(config, source), backup: publicConfig(config?.backup, source) });
+  const safeIssue = (error) => error instanceof HttpError ? error.message : "模型服务连接失败或响应超时，请检查服务状态。";
   const server = http.createServer(async (req, res) => {
     try {
       if (!requestAllowed(req))
@@ -334,17 +393,20 @@ export async function createGuardianServer({
         });
       if (req.method === "GET" && path === "/api/ai/config") {
         accounts.requireAdmin(req);
-        return send(res, 200, publicConfig(config, source));
+        return send(res, 200, visibleConfig());
+      }
+      if (req.method === "GET" && path === "/api/ai/status") {
+        accounts.requireAdmin(req);
+        return send(res, 200, { ...runtime.stats(), enabled: !!config?.enabled, model: config?.model ?? "", backup: publicConfig(config?.backup, source) });
       }
       if (
-        !["/api/ai/connect", "/api/ai/disconnect", "/api/chat"].includes(path)
+        !["/api/ai/connect", "/api/ai/disconnect", "/api/ai/backup/connect", "/api/ai/backup/disconnect", "/api/chat"].includes(path)
       )
         return send(res, 404, { error: "接口不存在。" });
       if (req.method !== "POST")
         return send(res, 405, { error: "请使用 POST 请求。" });
       const isSettings = path !== "/api/chat";
-      if (isSettings) accounts.requireAdmin(req);
-      else accounts.currentUser(req);
+      const user = isSettings ? accounts.requireAdmin(req) : accounts.currentUser(req);
       if (isSettings && req.headers["x-guardian-config"] !== "1")
         return send(res, 403, { error: "请从本机的 AI 连接设置操作。" });
       const now = Date.now();
@@ -367,7 +429,17 @@ export async function createGuardianServer({
               mode: "local",
             });
           }
-          const candidate = validateConfig(body, config);
+          const backup = path.startsWith("/api/ai/backup/");
+          if (backup && !config?.enabled) throw new HttpError(400, "请先配置并启用主 AI 服务。");
+          if (path === "/api/ai/backup/disconnect") {
+            const candidate = { ...config };
+            delete candidate.backup;
+            await persist(candidate);
+            config = candidate;
+            source = "saved";
+            return send(res, 200, { ...visibleConfig(), mode: "ai" });
+          }
+          const candidate = validateConfig(body, backup ? config?.backup : config);
           await callModel(
             candidate,
             [{ role: "user", content: "Reply only OK." }],
@@ -375,11 +447,12 @@ export async function createGuardianServer({
             fetchImpl,
           );
           candidate.verifiedAt = new Date().toISOString();
-          await persist(candidate);
-          config = candidate;
+          const next = backup ? { ...config, backup: candidate } : { ...candidate, ...(config?.backup ? { backup: config.backup } : {}) };
+          await persist(next);
+          config = next;
           source = "saved";
           return send(res, 200, {
-            ...publicConfig(config, source),
+            ...visibleConfig(),
             mode: "ai",
           });
         } finally {
@@ -395,10 +468,18 @@ export async function createGuardianServer({
       const sources = retrieveEvidence(messages.at(-1).content);
       if (concurrent >= 4) throw new HttpError(429, "请求较多，请稍后再试。");
       const current = config;
+      const quota = runtime.consume(user.id);
+      if (!quota.allowed) throw new HttpError(429, `今日智能咨询已达到 ${quota.limit} 次，请明天再试；紧急问题请联系现场人员。`);
       concurrent++;
+      const started = Date.now();
       try {
-        const text = await callModel(current, messages, false, fetchImpl, sources);
-        return send(res, 200, { text, model: current.model, sources });
+        const result = await recoverModel((service, signal) => callModel(service, messages, false, fetchImpl, sources, signal), current, current.backup, { delayMs: recoveryDelayMs });
+        runtime.record({ ok: true, model: result.model, durationMs: Date.now() - started, attempts: result.attempts, fallback: result.fallback, issue: result.issue ? safeIssue(result.issue) : null });
+        return send(res, 200, { text: result.text, model: result.model, sources, remaining: quota.remaining });
+      } catch (error) {
+        runtime.record({ ok: false, model: error.model ?? current.model, durationMs: Date.now() - started, attempts: error.attempts ?? 1, fallback: error.fallback ?? false, issue: safeIssue(error) });
+        if (user.role !== "admin") return send(res, error.status === 429 ? 429 : 503, { error: "智能咨询服务暂时繁忙，问题已保留，请稍后点击重新发送。" });
+        throw error;
       } finally {
         concurrent--;
       }
