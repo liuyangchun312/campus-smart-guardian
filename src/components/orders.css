@@ -99,6 +99,38 @@
 .repair-page .danger-notice p { font-size: 12px; }
 .repair-page .repair-field-error { color: light-dark(#963c2b, #ffc0ad); font-size: 13px; line-height: 1.8; margin: 8px 0; }
 .repair-page [aria-invalid="true"] { border-color: light-dark(#b34934, #f59c86); }
+.orders-heading-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.order-workflow-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding-block: 18px; border-top: 1px solid var(--records-line); }
+.order-workflow-actions > form { width: 100%; }
+.order-workflow-actions p, .order-workflow-message { font-size: 13px; line-height: 1.9; color: var(--records-muted); }
+.order-workflow-actions input, .order-workflow-actions textarea { width: 100%; color: var(--records-ink); background: var(--records-surface); border: 1px solid var(--records-line); border-radius: 6px; padding: 12px; font: inherit; font-size: 13px; }
+.order-workflow-actions textarea { resize: vertical; margin-bottom: 12px; line-height: 1.8; }
+.order-history-note { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--records-ink) !important; }
+.orders-page .status-badge.accepted { color: light-dark(#32618a, #bdddf9); background: light-dark(#eaf3fa, #263b4a); }
+.orders-page .status-badge.processing { color: light-dark(#866014, #f3d490); background: light-dark(#fff5d9, #443b25); }
+.orders-page .status-badge.awaiting_confirmation { color: light-dark(#7b4574, #e8bddf); background: light-dark(#f6edf4, #42303f); }
+.school-queue { border-block: 1px solid var(--records-line); padding: 24px 0 28px; margin-bottom: 28px; }
+.school-queue-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.school-queue-heading h2 { display: flex; align-items: center; gap: 8px; font-size: 18px; }
+.school-queue-heading p { font-size: 13px; color: var(--records-muted); margin-top: 8px; }
+.school-queue-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 20px 0; border-block: 1px solid var(--records-line); }
+.school-queue-counts > button { display: flex; flex-direction: column; align-items: flex-start; padding: 16px 12px; gap: 8px; border-right: 1px solid var(--records-line); text-align: left; }
+.school-queue-counts > button:last-child { border-right: 0; }
+.school-queue-counts > button[aria-pressed="true"] { background: var(--records-soft); }
+.school-queue-counts span { font-size: 12px; color: var(--records-muted); }
+.school-queue-counts strong { font-size: 24px; font-weight: 600; color: var(--records-ink); }
+.school-queue-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 36px 16px; color: var(--records-muted); }
+.school-queue .order-card h3 { font-size: 14px; margin-block: 16px 8px; overflow-wrap: anywhere; }
+.school-queue .order-card p { font-size: 12px; line-height: 1.8; margin-bottom: 8px; overflow-wrap: anywhere; }
+.school-queue .detail-meta code { overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .school-queue-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .school-queue-counts > button:nth-child(2) { border-right: 0; }
+  .school-queue-counts > button:nth-child(-n+2) { border-bottom: 1px solid var(--records-line); }
+  .school-queue .orders-filter-controls select { flex: 1 1 120px; }
+  .orders-heading-actions { width: 100%; }
+  .order-workflow-actions > button { max-width: 100%; white-space: normal; }
+}
 .large-type .orders-page .orders-table, .large-type .repair-page input, .large-type .repair-page select, .large-type .repair-page textarea { font-size: 15px; }
 .large-type .orders-page .orders-table th, .large-type .orders-page .orders-table code, .large-type .orders-page .orders-table small, .large-type .orders-page .orders-table time { font-size: 13px; }
 .large-type .orders-page .orders-record-title, .large-type .orders-page .order-card-body h3 { font-size: 16px; }

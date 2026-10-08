@@ -53,8 +53,8 @@ export function useAccountWorkspace(initial: WorkspaceSnapshot) {
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
-  const download = () => {
-    const url = URL.createObjectURL(new Blob([JSON.stringify(latest.current, null, 2)], { type: "application/json" }));
+  const download = (orders: WorkOrder[] = latest.current.orders) => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify({ ...latest.current, orders }, null, 2)], { type: "application/json" }));
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = "校园智护-工作记录备份.json"; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return { data, update, status, error, flush, download };

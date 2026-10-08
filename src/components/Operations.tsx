@@ -85,10 +85,10 @@ export default function Operations({ orders, inspections, navigate, openRecord, 
     <section aria-labelledby="ops-overview-title">
       <div className="ops-section-caption"><i className="ops-live-dot" aria-hidden="true" /><h2 id="ops-overview-title">当前跟进概览</h2><span>待办不限创建日期 · 解决率使用下方筛选范围</span></div>
       <div className="ops-metrics">
-        <article className="ops-metric"><div className="ops-metric-title">未解决工单<ClipboardList size={17} /></div><div className="ops-metric-number"><strong>{summary.openOrders}</strong><span>条</span></div><p>全部历史 · 待提交与已自行提交</p></article>
+        <article className="ops-metric"><div className="ops-metric-title">未解决工单<ClipboardList size={17} /></div><div className="ops-metric-number"><strong>{summary.openOrders}</strong><span>条</span></div><p>全部历史 · 草稿与未完成报修</p></article>
         <article className={`ops-metric ${summary.urgentOrders ? "is-alert" : ""}`}><div className="ops-metric-title">紧急待跟进<TriangleAlert size={17} /></div><div className="ops-metric-number"><strong>{summary.urgentOrders}</strong><span>条</span></div><p>全部历史 · 紧急 / 特急未解决工单</p></article>
         <article className={`ops-metric ${summary.overdueInspections ? "is-alert" : ""}`}><div className="ops-metric-title">逾期未闭环<CalendarClock size={17} /></div><div className="ops-metric-number"><strong>{summary.overdueInspections}</strong><span>条</span></div><p>全部历史 · 整改期限早于今天</p></article>
-        <article className="ops-metric"><div className="ops-metric-title">范围内工单解决率<CheckCircle2 size={17} /></div><div className="ops-metric-number"><strong>{summary.orderClosureRate ?? "—"}</strong>{summary.orderClosureRate !== null && <span>%</span>}</div><p>{periodLabel[period]}创建 · {summary.resolvedOrders} / {summary.scopedOrders.length} 条已标记解决</p></article>
+        <article className="ops-metric"><div className="ops-metric-title">范围内工单解决率<CheckCircle2 size={17} /></div><div className="ops-metric-number"><strong>{summary.orderClosureRate ?? "—"}</strong>{summary.orderClosureRate !== null && <span>%</span>}</div><p>{periodLabel[period]}创建 · {summary.resolvedOrders} / {summary.scopedOrders.length} 条已完成</p></article>
       </div>
     </section>
 
@@ -100,7 +100,7 @@ export default function Operations({ orders, inspections, navigate, openRecord, 
     <section aria-labelledby="ops-cohort-title">
       <div className="ops-toolbar"><div><h2 id="ops-cohort-title">记录分析</h2><p>按创建时间筛选：{periodDescription(period, now)}。图表与 CSV 使用同一范围。</p></div><div className="ops-period" role="group" aria-label="按记录创建日期筛选">{(["7", "30", "all"] as RecordPeriod[]).map((value) => <button key={value} aria-pressed={period === value} onClick={() => { onPeriodChange(value); setExportStatus(""); }}>{periodLabel[value]}</button>)}</div></div>
       {hasRecords && !scopeCount && <div className="ops-scope-empty"><span>所选创建范围内暂无记录；历史待办仍显示在下方。</span>{period !== "all" && <button onClick={() => onPeriodChange("all")}>查看全部历史</button>}</div>}
-      <div className="ops-panel ops-completion"><Completion title="报修工单 · 已标记解决" completed={summary.resolvedOrders} total={summary.scopedOrders.length} /><Completion title="安全巡检 · 已复核闭环" completed={summary.closedInspections} total={summary.scopedInspections.length} /></div>
+      <div className="ops-panel ops-completion"><Completion title="报修工单 · 已完成" completed={summary.resolvedOrders} total={summary.scopedOrders.length} /><Completion title="安全巡检 · 已复核闭环" completed={summary.closedInspections} total={summary.scopedInspections.length} /></div>
       <div className="ops-distributions">
         <section className="ops-panel"><div className="ops-panel-title"><h3>工单类别分布</h3><span>当前范围 · {summary.scopedOrders.length} 条</span></div>{categories.length ? <Distribution rows={categories} /> : <div className="ops-chart-empty"><p><BarChart3 size={18} /> 暂无可统计的工单类别</p></div>}</section>
         <section className="ops-panel"><div className="ops-panel-title"><h3>工单紧急程度</h3><span>当前范围 · 含已解决</span></div><Distribution rows={priorities} priority /></section>

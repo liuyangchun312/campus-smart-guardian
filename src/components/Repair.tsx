@@ -196,11 +196,11 @@ export default function Repair({
               <ShieldCheck size={16} />
               工单将保存于{storageLabel}，归属当前账号，尚未发送给学校。
               <br />
-              <span>保存后可复制，通过学校的正式报修渠道提交。</span>
+              <span>保存后核对工单详情，再点击“提交给学校”。</span>
             </p>
             <button className="button primary" type="submit">
               <ClipboardList size={16} />
-              保存报修工单
+              保存报修草稿
               <ArrowRight size={16} />
             </button>
           </div>
@@ -231,8 +231,8 @@ export default function Repair({
               <li>
                 <span>3</span>
                 <div>
-                  <strong>复制并提交</strong>
-                  <p>通过学校正式渠道发送工单。</p>
+                  <strong>提交学校</strong>
+                  <p>在工单详情提交，等待校方受理。</p>
                 </div>
               </li>
             </ol>

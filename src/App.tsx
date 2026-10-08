@@ -36,11 +36,13 @@ import { knowledgeSources, retrieveEvidence } from "../shared/knowledge.mjs";
 import type { EvidenceSource } from "../shared/knowledge.mjs";
 import { getLocalReply } from "./lib/advisor";
 import { useStoredState } from "./lib/storage";
-import type { Message, OrderStatus, Page, WorkOrder } from "./types";
+import type { Message, Page, WorkOrder } from "./types";
 import { parseWorkspaceRoute, workspaceHash, type InspectionViewState, type OrdersViewState, type WorkspaceRoute } from "./lib/navigation";
 import type { RecordPeriod } from "./lib/operations";
 import { DeploymentProvider, useDeployment } from "./lib/deployment";
 import { emptyRepairDraft, type RepairDraft } from "./lib/repair";
+import { useSchoolOrders } from "./lib/school-orders";
+import { mergeSchoolOrders } from "./lib/orders";
 import "./phase-one.css";
 
 const Chat = lazy(() => import("./components/Chat"));
@@ -134,7 +136,9 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
   const editedViews = useRef({ orders: false, safety: false });
   const [accountOpen, setAccountOpen] = useState(false);
   const workspace = useAccountWorkspace(initial);
-  const { messages, orders, inspections } = workspace.data;
+  const { messages, orders: personalOrders, inspections } = workspace.data;
+  const schoolOrders = useSchoolOrders();
+  const orders = mergeSchoolOrders(personalOrders, schoolOrders.orders);
   const setMessages = (next: Message[] | ((previous: Message[]) => Message[])) => workspace.update("messages", next);
   const setOrders = (next: WorkOrder[] | ((previous: WorkOrder[]) => WorkOrder[])) => workspace.update("orders", next);
   const setInspections = (next: Inspection[] | ((previous: Inspection[]) => Inspection[])) => workspace.update("inspections", next);
@@ -252,7 +256,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
       if (!isMessages(oldMessages) || !isOrders(oldOrders) || !isInspections(oldInspections)) throw new Error("旧版记录格式不完整，请先导出或核对原始数据。");
       if (!oldMessages.length && !oldOrders.length && !oldInspections.length) { notify("此浏览器没有可导入的旧版记录。"); return; }
       const merge = <T extends { id: string }>(current: T[], legacy: T[]) => [...new Map([...legacy, ...current].map((item) => [item.id, item])).values()];
-      const next = { messages: merge(messages, oldMessages), orders: merge(orders, oldOrders), inspections: merge(inspections, oldInspections) };
+      const next = { messages: merge(messages, oldMessages), orders: merge(personalOrders, oldOrders), inspections: merge(inspections, oldInspections) };
       if (!isMessages(next.messages) || !isOrders(next.orders) || !isInspections(next.inspections)) throw new Error("合并后记录超出容量，请先归档部分记录。");
       setMessages(next.messages); setOrders(next.orders); setInspections(next.inspections);
       notify("旧版记录已加入当前账号，正在同步；原始浏览器记录保留。");
@@ -418,24 +422,21 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
     setOrders((previous) => [order, ...previous].slice(0, 1000));
     setRepairDraft(emptyRepairDraft);
     navigate("orders", { recordId: order.id });
-    notify("工单已加入您的账号，请复制后通过学校正式渠道提交");
+    notify("报修草稿已保存，请核对后点击“提交给学校”");
   };
-  const updateOrder = (id: string, status: OrderStatus) => {
-    setOrders((previous) =>
-      previous.map((order) =>
-        order.id === id && order.status !== status
-          ? {
-              ...order,
-              status,
-              history: [
-                ...order.history,
-                { status, at: new Date().toISOString() },
-              ],
-            }
-          : order,
-      ),
-    );
-    notify("您的工单跟进状态已更新");
+  const actOnOrder = async (id: string, action: "submit" | "confirm" | "reopen", note?: string) => {
+    try {
+      if (action === "submit") {
+        if (!(await workspace.flush())) { notify("草稿尚未同步，请重试保存后再提交。"); return false; }
+        await schoolOrders.submit(id);
+      } else {
+        const order = orders.find(item => item.id === id);
+        if (!order) return false;
+        await schoolOrders.act(order, action, { note });
+      }
+      notify(action === "submit" ? "工单已提交到学校，等待管理员受理" : action === "confirm" ? "已确认完成，处理记录已保存" : "反馈已发送给校方，工单继续处理");
+      return true;
+    } catch (e) { notify(e instanceof Error ? e.message : "工单操作失败，请重试。"); return false; }
   };
 
   return (
@@ -615,7 +616,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
         >
           {workspace.error && (
             <div className="storage-warning" role="alert">
-              <p>{workspace.error}</p><div className="sync-actions"><button onClick={() => void workspace.flush()}>重试保存</button><button onClick={workspace.download}>导出本页备份</button><button onClick={() => { if (window.confirm("重新载入将丢弃本页未保存修改。请先导出备份。确定继续？")) window.location.reload(); }}>重新载入 / 登录</button></div>
+              <p>{workspace.error}</p><div className="sync-actions"><button onClick={() => void workspace.flush()}>重试保存</button><button onClick={() => workspace.download(orders)}>导出本页备份</button><button onClick={() => { if (window.confirm("重新载入将丢弃本页未保存修改。请先导出备份。确定继续？")) window.location.reload(); }}>重新载入 / 登录</button></div>
             </div>
           )}
           <Suspense fallback={<div className="page-loading" role="status">正在载入工作区…</div>}>
@@ -656,8 +657,13 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
               onSelect={selectRecord}
               view={ordersView}
               onViewChange={changeOrdersView}
-              onUpdate={updateOrder}
+              onAction={actOnOrder}
+              busy={schoolOrders.busy}
+              loading={schoolOrders.loading}
+              error={schoolOrders.error}
+              onRefresh={() => void schoolOrders.refresh()}
               onDelete={(id) => {
+                if (schoolOrders.orders.some(order => order.id === id)) { notify("已提交校方的工单需保留处理记录，不能删除。"); return; }
                 setOrders((previous) =>
                   previous.filter((order) => order.id !== id),
                 );
@@ -683,7 +689,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
           <p>校园服务场景演示 · 非校方官方服务渠道</p>
         </footer>
       </div>
-      {accountOpen && <AccountPanel user={user} onClose={() => setAccountOpen(false)} signOut={signOut} importLegacy={importLegacy} download={workspace.download} notify={notify} />}
+      {accountOpen && <AccountPanel user={user} onClose={() => setAccountOpen(false)} signOut={signOut} importLegacy={importLegacy} download={() => workspace.download(orders)} notify={notify} />}
       {aiSettingsOpen && user.role === "admin" && (
         <AiSettings
           onClose={() => {

@@ -1,4 +1,5 @@
 import type { WorkOrder } from "../types";
+import { orderStatusLabel } from "./orders";
 import { getRisk, hasCriticalFailure, inspectionRisk, isOverdue, SAFETY_TEMPLATES, STATUS_LABELS } from "./safety";
 import type { Inspection } from "./safety";
 
@@ -61,7 +62,7 @@ export function pendingTasks(orders: WorkOrder[], inspections: Inspection[], now
     .filter((row) => row.status !== "resolved")
     .map((row) => ({
       id: row.id, key: `order-${row.id}`, type: "order", title: row.description, location: row.location,
-      createdAt: row.createdAt, label: `${row.priority} · ${row.status === "draft" ? "待提交" : "已自行提交"}`,
+      createdAt: row.createdAt, label: `${row.priority} · ${orderStatusLabel(row)}`,
       alert: row.priority !== "普通", rank: row.priority === "特急" ? 0 : row.priority === "紧急" ? 2 : 4,
     }));
   const inspectionTasks: PendingTask[] = recordsInPeriod(inspections, "all", now)
@@ -122,13 +123,12 @@ export function toCsv(rows: (string | number)[][]): string {
 export function operationsCsv(orders: WorkOrder[], inspections: Inspection[], period: RecordPeriod, now: Date): string {
   const scope = periodDescription(period, now);
   const capturedAt = now.toISOString();
-  const orderLabels = { draft: "待提交学校", submitted: "已自行提交", resolved: "已标记解决" };
   const rows: (string | number)[][] = [[
     "数据类型", "记录编号", "类别/巡检场景", "地点", "描述/备注", "优先级", "当前状态", "创建时间（ISO 8601）",
     "整改责任人", "整改截止日期", "整改措施", "初始RPN", "复核RPN", "创建范围（浏览器本地日期）", "快照时间（ISO 8601）",
   ]];
   for (const row of recordsInPeriod(orders, period, now)) rows.push([
-    "报修工单", row.id, row.category, row.location, row.description, row.priority, orderLabels[row.status], row.createdAt,
+    "报修工单", row.id, row.category, row.location, row.description, row.priority, orderStatusLabel(row), row.createdAt,
     "", "", "", "", "", scope, capturedAt,
   ]);
   for (const row of recordsInPeriod(inspections, period, now)) rows.push([

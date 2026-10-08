@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   ArrowRight,
   ClipboardList,
@@ -11,26 +11,27 @@ import {
   ShieldCheck,
   Trash2,
   X,
+  RefreshCw,
+  Send,
+  CheckCircle2,
+  RotateCcw,
 } from "lucide-react";
 import Modal from "./Modal";
 import { formatDate } from "../lib/storage";
-import { filterOrders } from "../lib/orders";
+import { filterOrders, statusLabels, orderStatusLabel } from "../lib/orders";
+import OrderHistory from "./OrderHistory";
 import type { OrdersViewState } from "../lib/navigation";
 import { useDeployment } from "../lib/deployment";
-import type { OrderStatus, WorkOrder } from "../types";
+import type { WorkOrder } from "../types";
 import "./orders.css";
 
-export const statusLabels: Record<OrderStatus, string> = {
-  draft: "待提交学校",
-  submitted: "已自行提交",
-  resolved: "已标记解决",
-};
+export { statusLabels };
 export const orderText = (order: WorkOrder) =>
   `【报修工单】${order.id}\n【工单类型】${order.category}\n【发生区域】${order.location}\n【故障描述】${order.description}\n【紧急级别】${order.priority}\n【一线作业安全提示】${order.safety}\n【说明】此为用户整理的报修内容，请接收方确认受理。`;
 
 export default function Orders({
   orders,
-  onUpdate,
+  onAction,
   onDelete,
   onCreate,
   notify,
@@ -38,9 +39,13 @@ export default function Orders({
   onSelect,
   view,
   onViewChange,
+  busy,
+  error,
+  loading,
+  onRefresh,
 }: {
   orders: WorkOrder[];
-  onUpdate: (id: string, status: OrderStatus) => void;
+  onAction: (id: string, action: "submit" | "confirm" | "reopen", note?: string) => Promise<boolean>;
   onDelete: (id: string) => void;
   onCreate: () => void;
   notify: (value: string) => void;
@@ -48,6 +53,10 @@ export default function Orders({
   onSelect: (id: string | null) => void;
   view: OrdersViewState;
   onViewChange: (view: OrdersViewState) => void;
+  busy: boolean;
+  error: string;
+  loading: boolean;
+  onRefresh: () => void;
 }) {
   const { label, storageLabel, description } = useDeployment();
   const selected = orders.find((order) => order.id === selectedId);
@@ -58,12 +67,15 @@ export default function Orders({
     { id: "open", label: "未解决" },
     { id: "draft", label: "待提交" },
     { id: "submitted", label: "已提交" },
+    { id: "accepted", label: "已受理" },
+    { id: "processing", label: "处理中" },
+    { id: "awaiting_confirmation", label: "待确认" },
     { id: "resolved", label: "已解决" },
   ];
   const copy = async (order: WorkOrder) => {
     try {
       await navigator.clipboard.writeText(orderText(order));
-      notify("工单已复制，请通过学校正式报修渠道提交");
+      notify("工单内容已复制");
     } catch {
       notify("复制失败，请打开工单详情并手动复制文字");
     }
@@ -78,17 +90,18 @@ export default function Orders({
           </h1>
           <p>当前账号共 {orders.length} 张工单，{orders.filter((order) => order.status !== "resolved").length} 张未解决。</p>
         </div>
-        <button className="button primary small" onClick={onCreate}>
+        <div className="orders-heading-actions"><button className="button outline small" disabled={busy || loading} onClick={onRefresh}><RefreshCw size={16} />刷新进度</button><button className="button primary small" onClick={onCreate}>
           <Plus size={16} />
           新建报修
-        </button>
+        </button></div>
       </div>
       <div className="inline-notice" title={description}>
         <ShieldCheck size={19} />
         <p>
-          {label} · 记录保存在{storageLabel}。提交和解决状态由您手动更新，未连接学校派单系统。
+          {label} · 记录保存在{storageLabel}。提交后由学校管理员受理，校方处理完成后请确认结果。
         </p>
       </div>
+      {error && <div className="account-error" role="alert">{error} <button className="text-button" disabled={busy} onClick={onRefresh}>重新读取进度</button></div>}
       <div className="orders-filters">
         <div className="filter-tabs" role="group" aria-label="工单状态筛选">
           {tabs.map((tab) => (
@@ -132,7 +145,7 @@ export default function Orders({
         </div>
         </div>
       </div>
-      <div className="orders-results" aria-live="polite">显示 {filtered.length} / {orders.length} 张工单</div>
+      <div className="orders-results" aria-live="polite">{loading ? "正在读取校方工单进度…" : `显示 ${filtered.length} / ${orders.length} 张工单`}</div>
       <div className={`orders-records orders-layout-${view.layout}`}>
         {filtered.length === 0 ? (
           <div className="empty-state orders-empty">
@@ -140,7 +153,7 @@ export default function Orders({
               <ClipboardList size={42} strokeWidth={1.3} />
             </span>
             <h2>
-              {orders.length ? "没有找到符合条件的工单" : "还没有报修记录"}
+              {loading ? "正在读取工单" : orders.length ? "没有找到符合条件的工单" : "还没有报修记录"}
             </h2>
             <p>
               {orders.length
@@ -164,7 +177,7 @@ export default function Orders({
               <tbody>{filtered.map((order) => <tr key={order.id}>
                 <td><button className="orders-record-title" onClick={() => onSelect(order.id)} title={order.description}>{order.description}</button><code>{order.id}</code></td>
                 <td><span className="orders-location">{order.location}</span><small>{order.category}</small></td>
-                <td><span className={`status-badge ${order.status}`}>{statusLabels[order.status]}</span></td>
+                <td><span className={`status-badge ${order.status}`}>{orderStatusLabel(order)}</span></td>
                 <td><span className={`priority-badge ${order.priority === "特急" ? "danger" : order.priority === "紧急" ? "urgent" : ""}`}>{order.priority}</span></td>
                 <td><time dateTime={order.createdAt}>{formatDate(order.createdAt, true)}</time></td>
                 <td><div className="orders-row-actions"><button className="icon-button" title="复制工单" aria-label={`复制工单 ${order.id}`} onClick={() => void copy(order)}><Copy size={16} /></button><button className="icon-button" title="查看详情" aria-label={`查看工单 ${order.id}`} onClick={() => onSelect(order.id)}><ArrowRight size={16} /></button></div></td>
@@ -178,7 +191,7 @@ export default function Orders({
               <div className="order-card-top">
                 <span className={`status-badge ${order.status}`}>
                   <i />
-                  {statusLabels[order.status]}
+                  {orderStatusLabel(order)}
                 </span>
                 <span
                   className={`priority-badge ${order.priority === "特急" ? "danger" : order.priority === "紧急" ? "urgent" : ""}`}
@@ -230,8 +243,9 @@ export default function Orders({
         <Modal title="报修工单详情" onClose={() => onSelect(null)}>
           <div className="detail-meta">
             <code>{selected.id}</code>
+            <button className="icon-button" title="刷新工单进度" aria-label="刷新工单进度" disabled={busy} onClick={onRefresh}><RefreshCw size={16} /></button>
             <span className={`status-badge ${selected.status}`}>
-              {statusLabels[selected.status]}
+              {orderStatusLabel(selected)}
             </span>
           </div>
           <dl className="order-details">
@@ -245,39 +259,15 @@ export default function Orders({
             <dd className="full">{selected.description}</dd>
             <dt>作业安全提示</dt>
             <dd className="full safety-detail">{selected.safety}</dd>
+            {selected.school && <><dt>维修负责人</dt><dd>{selected.school.assignee || "学校待安排"}</dd><dt>提交时间</dt><dd>{formatDate(selected.school.submittedAt, true)}</dd></>}
           </dl>
-          <div className="timeline">
-            <h3>处理记录</h3>
-            {selected.history.map((entry, i) => (
-              <div key={`${entry.at}-${i}`}>
-                <span />
-                <p>
-                  {statusLabels[entry.status]}
-                  <small>
-                    {formatDate(entry.at, true)} ·{" "}
-                    {i === 0 ? `保存于${storageLabel}` : "您手动更新"}
-                  </small>
-                </p>
-              </div>
-            ))}
-          </div>
-          <label className="field-label" htmlFor="order-status">
-            更新我的跟进状态
-          </label>
-          <select
-            id="order-status"
-            value={selected.status}
-            onChange={(event) =>
-              onUpdate(selected.id, event.target.value as OrderStatus)
-            }
-          >
-            <option value="draft">待提交学校</option>
-            <option value="submitted">我已通过校方渠道自行提交</option>
-            <option value="resolved">我确认问题已解决</option>
-          </select>
+          <OrderHistory order={selected} />
+          <UserOrderActions key={selected.id} order={selected} busy={busy} onAction={onAction} />
+          {error && <p className="account-error" role="alert">{error}</p>}
           <div className="modal-actions">
-            <button
+            {!selected.school && <button
               className="text-button delete-button"
+              disabled={busy}
               onClick={() => {
                 if (
                   window.confirm("确定删除这张账号工单吗？删除后无法恢复。")
@@ -289,7 +279,7 @@ export default function Orders({
             >
               <Trash2 size={15} />
               删除工单
-            </button>
+            </button>}
             <button
               className="button primary"
               onClick={() => void copy(selected)}
@@ -300,11 +290,19 @@ export default function Orders({
           </div>
         </Modal>
       )}
-      {selectedId !== null && !selected && (
+      {selectedId !== null && !selected && !loading && !error && (
         <Modal title="工单不存在" onClose={() => onSelect(null)}>
           <div className="orders-missing"><ClipboardList size={30} /><p>当前账号中没有找到工单 <code>{selectedId}</code>。记录可能已删除，或链接属于其他账号。</p><button className="button outline" onClick={() => onSelect(null)}>返回工单列表</button></div>
         </Modal>
       )}
+      {selectedId !== null && !selected && !loading && error && <Modal title="工单进度暂不可用" onClose={() => onSelect(null)}><p className="account-error" role="alert">{error}</p><button className="button outline" onClick={onRefresh}><RefreshCw size={16} />重新读取工单</button></Modal>}
     </div>
   );
+}
+
+function UserOrderActions({ order, busy, onAction }: { order: WorkOrder; busy: boolean; onAction: (id: string, action: "submit" | "confirm" | "reopen", note?: string) => Promise<boolean> }) {
+  const [note, setNote] = useState("");
+  if (!order.school) return <div className="order-workflow-actions">{order.status !== "resolved" ? <><p>{order.status === "submitted" ? "此为旧版自行提交记录，尚未进入本站校方队列。" : "草稿尚未提交，提交后学校管理员才能收到。"}</p><button className="button primary" disabled={busy} onClick={() => void onAction(order.id, "submit")}><Send size={16} />{busy ? "正在提交…" : "提交给学校"}</button></> : <p>旧版已解决记录已归档。再次出现故障时请新建报修。</p>}</div>;
+  if (!["awaiting_confirmation", "resolved"].includes(order.status)) return <p className="order-workflow-message">{order.status === "submitted" ? "已送达校方工单队列，等待学校受理。" : `学校${order.school.assignee ? `（${order.school.assignee}）` : ""}正在跟进处理。`}</p>;
+  return <div className="order-workflow-actions">{order.status === "awaiting_confirmation" && <button className="button primary" disabled={busy} onClick={() => { if (window.confirm("确认现场故障已解决？确认后工单将完成。")) void onAction(order.id, "confirm"); }}><CheckCircle2 size={16} />确认问题已解决</button>}<form onSubmit={async event => { event.preventDefault(); if (note.trim() && await onAction(order.id, "reopen", note.trim())) setNote(""); }}><label className="field-label" htmlFor="order-feedback">{order.status === "resolved" ? "问题再次出现" : "问题仍未解决"}</label><textarea id="order-feedback" required maxLength={3000} rows={3} value={note} onChange={event => setNote(event.target.value)} placeholder="请说明仍存在的故障和现场情况" /><button className="button outline small" type="submit" disabled={busy || !note.trim()}><RotateCcw size={16} />反馈并继续处理</button></form></div>;
 }

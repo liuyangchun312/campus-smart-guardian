@@ -11,7 +11,8 @@ export type Message = {
   identity?: "worker" | "student" | "other";
   sources?: EvidenceSource[];
 };
-export type OrderStatus = "draft" | "submitted" | "resolved";
+export type OrderStatus = "draft" | "submitted" | "accepted" | "processing" | "awaiting_confirmation" | "resolved";
+export type SchoolOrderAction = "accept" | "start" | "complete" | "confirm" | "reopen";
 export type WorkOrder = {
   id: string;
   category: string;
@@ -21,7 +22,8 @@ export type WorkOrder = {
   safety: string;
   status: OrderStatus;
   createdAt: string;
-  history: { status: OrderStatus; at: string }[];
+  school?: { ownerId: string; ownerName: string; ownerUsername: string; submittedAt: string; revision: number; assignee: string };
+  history: { status: OrderStatus; at: string; actorName?: string; actorRole?: "user" | "admin"; note?: string }[];
 };
 export type Article = {
   id: string;

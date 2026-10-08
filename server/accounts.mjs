@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { randomBytes, randomUUID, scrypt, timingSafeEqual, createHash } from "node:crypto";
 import { promisify } from "node:util";
 import { isInspections } from "../src/lib/safety.ts";
+import { createSchoolOrders } from "./school-orders.mjs";
 
 const derive = promisify(scrypt);
 const SESSION_MS = 12 * 60 * 60 * 1000;
@@ -105,14 +106,16 @@ export async function createAccounts({ file, bootstrapToken, send, readJson, dat
     return user;
   }
   const routePaths = new Set(["/api/auth/session", "/api/auth/register", "/api/auth/login", "/api/auth/bootstrap", "/api/auth/logout", "/api/auth/password", "/api/workspace", "/api/admin/users"]);
+  const schoolOrders = createSchoolOrders({ db, transaction, currentUser, requireAdmin, readJson, send, ErrorType: AccountError });
   async function handle(req, res, path) {
-    if (!routePaths.has(path) && !path.startsWith("/api/admin/users/")) return false;
+    if (!routePaths.has(path) && !path.startsWith("/api/admin/users/") && !schoolOrders.matches(path)) return false;
     const respond = (status, body) => { send(res, status, body); return true; };
     if (req.method === "GET" && path === "/api/auth/session") {
       const user = currentUser(req, false);
       return respond(200, { user: user ? safeUser(user) : null, setupRequired: needsAdmin() });
     }
     if (req.method !== "GET" && req.headers["x-guardian-request"] !== "1") throw new AccountError(403, "请从应用页面提交请求。");
+    if (schoolOrders.matches(path)) return schoolOrders.handle(req, res, path);
     if (req.method === "POST" && ["/api/auth/register", "/api/auth/bootstrap"].includes(path)) {
       const body = await readJson(req);
       const bootstrap = path.endsWith("bootstrap");

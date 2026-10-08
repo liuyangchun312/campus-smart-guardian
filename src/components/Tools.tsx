@@ -294,7 +294,7 @@ export default function Tools({
           </div>
           <p className="inline-note">
             本项目为校园服务场景演示，不代表学校官方平台。未配置 AI
-            服务时使用本地参考问答，工单未接入校方派单系统。
+            服务时使用本地参考问答，提交的报修由本站校方管理员受理。
           </p>
         </div>
       )}
@@ -308,7 +308,7 @@ export default function Tools({
                   ? `您有 ${draftCount} 张工单待提交学校`
                   : "目前没有待提交的工单"}
               </h3>
-              <p>账号保存不等于校方受理，请通过学校正式渠道提交。</p>
+              <p>在工单详情点击“提交给学校”，提交后可查看受理和处理进度。</p>
             </div>
           </div>
           <div className="notification-item">
@@ -336,7 +336,7 @@ export default function Tools({
           <div className="tool-intro">
             <ShieldCheck size={23} />
             <p>
-              对话、工单和巡检整改记录按账号保存在{storageLabel}中，不会自动同步到学校。
+              记录按账号保存在{storageLabel}中。校方管理员可查看您明确提交的报修工单，私人咨询和未提交草稿不进入校方队列。
             </p>
           </div>
           <div className="privacy-copy">
@@ -351,7 +351,7 @@ export default function Tools({
             </p>
             <h3>删除与保存</h3>
             <p>
-              在咨询页点击“新对话”可清除对话记录，在工单详情可删除单张工单。巡检可导出单条Markdown，运行看板可导出当前范围CSV。退出登录或清除浏览器数据不会删除账号中的服务器记录。账号菜单可修改密码、导出备份，或导入升级前的浏览器记录。
+              在咨询页点击“新对话”可清除对话记录，未提交的工单可删除。已提交工单保留校方与用户的处理记录。巡检可导出单条Markdown，运行看板可导出当前范围CSV。退出登录或清除浏览器数据不会删除账号中的服务器记录。账号菜单可修改密码、导出备份，或导入升级前的浏览器记录。
             </p>
           </div>
         </>

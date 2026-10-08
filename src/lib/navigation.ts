@@ -14,7 +14,7 @@ export type InspectionViewState = {
 
 const pages: Page[] = ["home", "operations", "safety", "chat", "repair", "orders", "library", "knowledge", "research", "admin"];
 const filters: Partial<Record<Page, readonly string[]>> = {
-  orders: ["all", "open", "draft", "submitted", "resolved", "urgent"],
+  orders: ["all", "open", "draft", "submitted", "accepted", "processing", "awaiting_confirmation", "resolved", "urgent"],
   safety: ["all", "open", "overdue", "review", "high", "closed"],
 };
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WorkOrder } from "../types";
-import { filterOrders } from "./orders";
+import { filterOrders, mergeSchoolOrders, orderStatusLabel, sortSchoolOrders } from "./orders";
 
 const order = (id: string, status: WorkOrder["status"], priority: WorkOrder["priority"]): WorkOrder => ({
   id,
@@ -32,5 +32,19 @@ describe("工单筛选", () => {
   it("returns no unrelated records for unmatched filters", () => {
     expect(filterOrders(orders, { search: "不存在的地点", filter: "all", priority: "all" })).toEqual([]);
     expect(filterOrders(orders, { search: "", filter: "draft", priority: "紧急" })).toEqual([]);
+  });
+
+  it("uses the official state rather than a duplicate private draft", () => {
+    const official = { ...order("BX-A", "processing", "紧急"), school: { ownerId: "user1", ownerName: "测试", ownerUsername: "test", submittedAt: "2026-10-08T01:00:00Z", revision: 3, assignee: "维修组" } };
+    expect(mergeSchoolOrders(orders, [official]).find(row => row.id === "BX-A")).toEqual(official);
+    expect(filterOrders([official], { search: "", filter: "open", priority: "all" })).toEqual([official]);
+    expect(orderStatusLabel(official)).toBe("处理中");
+    expect(orderStatusLabel(orders[1])).toContain("历史记录");
+  });
+  it("keeps urgent official orders ahead of newly updated normal orders", () => {
+    const metadata = { ownerId: "user1", ownerName: "测试", ownerUsername: "test", submittedAt: "2026-10-08T01:00:00Z", revision: 1, assignee: "" };
+    const normal = { ...order("normal", "accepted", "普通"), school: metadata };
+    const urgent = { ...order("urgent", "submitted", "特急"), school: metadata };
+    expect(sortSchoolOrders([normal, urgent]).map(item => item.id)).toEqual(["urgent", "normal"]);
   });
 });
