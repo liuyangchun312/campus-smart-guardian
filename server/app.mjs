@@ -86,7 +86,7 @@ function canonicalBase(value) {
   } catch {
     throw new HttpError(
       400,
-      "服务地址格式不正确。请填写 HTTPS API Base URL，例如 https://ahhilai.top/v1。",
+      "服务地址格式不正确。请填写 HTTPS API Base URL，例如 https://api.deepseek.com。",
       "baseUrl",
     );
   }

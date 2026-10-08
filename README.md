@@ -159,19 +159,19 @@ npm run dev
 
 2026-10-02核对论文题录及NIOSH网页。FMEA综述核对的是出版信息，未声称全文复现。本项目借鉴RAG设计思想，未复现原论文的稠密检索与联合训练，也不声称获得其论文指标。测试验证代码行为，不能替代真实校园场景的准确性或安全有效性评估。
 
-## 连接 AHHil_AI 中转站模型
+## 连接 DeepSeek 官方 API
 
 以管理员账号登录，打开右上角 **“连接 AI”**、侧栏 **“AI 连接设置”** 或管理台的 **“配置 AI 服务”**：
 
-1. 到 [ahhilai.top 控制台](https://ahhilai.top/dashboard) 的“令牌管理”创建 API Key，选择允许访问目标模型的分组。
-2. 粘贴令牌。地址已预填 `https://ahhilai.top/v1`，默认模型为模型广场当前列出的 `deepseek-v4.1-flash`，协议 `Chat Completions`；该模型在站点列表中对应“小国模”分组。
-3. 点击 **“测试连接并启用 AI”**。只有收到真实模型响应后，设置才会保存并即时生效，无需重启。窗口也提供 `gpt-5.5` + `Responses` 选项，具体权限和可用性以账号为准。
+1. 到 [DeepSeek 开放平台](https://platform.deepseek.com/api_keys) 创建 API Key，并确认账户有可用余额。
+2. 粘贴密钥。地址已预填 `https://api.deepseek.com`，默认模型为 `deepseek-flash`，协议 `Chat Completions`。窗口也提供 `deepseek-v4-pro` 选项。
+3. 点击 **“测试连接并启用 AI”**。只有收到真实模型响应后，设置才会保存并即时生效，无需重启。已有配置会继续显示原服务；迁移时点击 DeepSeek 模型选项切换官方地址，并填写官方签发的新密钥。
 
-参考：[站点接入文档](https://ahhilai.top/docs#protocol)、[模型广场](https://ahhilai.top/pricing)。模型名称和分组核对日期：2026-10-01。
+参考：[官方接入文档](https://api-docs.deepseek.com/zh-cn/)、[模型与价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing)。模型名称核对日期：2026-10-08。
 
 本机版密钥保存在 `.guardian/ai-config.json` 中，由 Node 后端读取；云端版管理员保存的配置保存在 Durable Object SQLite 中。密钥不写入浏览器存储、不回显到网页。`.guardian/` 已加入 `.gitignore`，本机密钥文件未加密，请勿上传或分享。网页保存的设置优先于环境变量。点击“停用 AI 连接”会清除网页保存的令牌，并持久保持停用状态。
 
-启用后，问题与最近对话会经当前部署的后端发送给配置的中转站。请求失败时保留问题并提供重试入口，管理员可查看错误和服务设置；不会用预设指引代替模型答复。未接通时，页面清楚标识为本地参考问答。
+启用后，问题与最近对话会经当前部署的后端发送给配置的模型服务商。请求失败时保留问题并提供重试入口，管理员可查看错误和服务设置；不会用预设指引代替模型答复。未接通时，页面清楚标识为本地参考问答。
 
 ### 平台统一提供智能咨询
 
@@ -195,12 +195,12 @@ npm run dev
 Copy-Item .env.example .env
 ```
 
-在 `.env` 中填写站点配置：
+在 `.env` 中填写 DeepSeek 官方配置：
 
 ```dotenv
-AI_API_KEY=填写中转站签发的令牌
-AI_BASE_URL=https://ahhilai.top/v1
-AI_MODEL=deepseek-v4.1-flash
+AI_API_KEY=填写DeepSeek开放平台签发的密钥
+AI_BASE_URL=https://api.deepseek.com
+AI_MODEL=deepseek-flash
 AI_PROTOCOL=chat
 ```
 

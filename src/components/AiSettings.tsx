@@ -23,8 +23,8 @@ type PublicConfig = {
   source: "saved" | "env" | "none";
   protocol: "chat" | "responses";
 };
-const RELAY_URL = "https://ahhilai.top/v1";
-const DEFAULT_MODEL = "deepseek-v4.1-flash";
+const DEFAULT_BASE_URL = "https://api.deepseek.com";
+const DEFAULT_MODEL = "deepseek-flash";
 
 export default function AiSettings({
   onClose,
@@ -38,7 +38,7 @@ export default function AiSettings({
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const backup = target === "backup";
   const endpoint = backup ? "/api/ai/backup" : "/api/ai";
-  const [baseUrl, setBaseUrl] = useState(RELAY_URL);
+  const [baseUrl, setBaseUrl] = useState(DEFAULT_BASE_URL);
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [protocol, setProtocol] = useState<"chat" | "responses">("chat");
   const [apiKey, setApiKey] = useState("");
@@ -198,17 +198,16 @@ export default function AiSettings({
         <li>
           <span>1</span>
           <div>
-            <strong>在中转站创建令牌</strong>
+            <strong>创建 DeepSeek API Key</strong>
             <p>
-              登录站点控制台，在“令牌管理”创建
-              Key，选择可访问目标模型的分组，并确认有可用额度。
+              登录 DeepSeek 开放平台，创建 API Key，并确认账户有可用余额。
             </p>
             <a
-              href="https://ahhilai.top/dashboard"
+              href="https://platform.deepseek.com/api_keys"
               target="_blank"
               rel="noopener noreferrer"
             >
-              打开 AHHil_AI 控制台
+              打开 DeepSeek 开放平台
               <ArrowUpRight size={14} />
             </a>
           </div>
@@ -216,9 +215,9 @@ export default function AiSettings({
         <li>
           <span>2</span>
           <div>
-            <strong>填写令牌，确认模型</strong>
+            <strong>填写密钥，确认模型</strong>
             <p>
-              已按站点文档预填地址和示例模型，实际可用模型以您账号的权限为准。
+              已预填 DeepSeek 官方地址和模型，实际可用模型以您的账号权限为准。
             </p>
           </div>
         </li>
@@ -226,7 +225,7 @@ export default function AiSettings({
       <form onSubmit={(event) => void connect(event)} autoComplete="off">
         <fieldset className="ai-settings-fields" disabled={!!busy}>
           <label className="field-label" htmlFor="ai-key">
-            中转站 API Key <KeyRound size={13} />
+            API Key <KeyRound size={13} />
           </label>
           <div className="secret-input">
             <input
@@ -241,7 +240,7 @@ export default function AiSettings({
               placeholder={
                 canReuseKey
                   ? "已保存密钥；留空继续使用，更换时粘贴新密钥"
-                  : "粘贴 ahhilai.top 令牌管理中生成的 Key"
+                  : "粘贴 DeepSeek 开放平台生成的 API Key"
               }
               onChange={(event) => {
                 setApiKey(event.target.value);
@@ -294,34 +293,35 @@ export default function AiSettings({
             <button
               type="button"
               onClick={() => {
-                setModel("deepseek-v4.1-flash");
+                setBaseUrl(DEFAULT_BASE_URL);
+                setModel(DEFAULT_MODEL);
                 setProtocol("chat");
                 setSuccess(false);
               }}
-              className={model === "deepseek-v4.1-flash" ? "selected" : ""}
+              className={model === DEFAULT_MODEL ? "selected" : ""}
             >
-              DeepSeek V4.1 Flash
+              DeepSeek Flash
             </button>
             <button
               type="button"
               onClick={() => {
-                setModel("gpt-5.5");
-                setProtocol("responses");
+                setBaseUrl(DEFAULT_BASE_URL);
+                setModel("deepseek-v4-pro");
+                setProtocol("chat");
                 setSuccess(false);
               }}
-              className={model === "gpt-5.5" ? "selected" : ""}
+              className={model === "deepseek-v4-pro" ? "selected" : ""}
             >
-              GPT 5.5
+              DeepSeek V4 Pro
             </button>
           </div>
           <p className="field-help">
-            DeepSeek 在站点列表中对应“小国模”分组；GPT 需允许访问的 GPT 分组。
             <a
-              href="https://ahhilai.top/pricing"
+              href="https://api-docs.deepseek.com/zh-cn/quick_start/pricing"
               target="_blank"
               rel="noopener noreferrer"
             >
-              查看站点模型列表 <ArrowUpRight size={11} />
+              查看 DeepSeek 模型与价格 <ArrowUpRight size={11} />
             </a>
           </p>
           <label className="field-label" htmlFor="ai-protocol">
@@ -336,9 +336,9 @@ export default function AiSettings({
             }}
           >
             <option value="responses">
-              Responses · 站点 GPT 文档使用的接口
+              Responses · 其他兼容服务
             </option>
-            <option value="chat">Chat Completions · 通用对话接口</option>
+            <option value="chat">Chat Completions · DeepSeek 对话接口</option>
           </select>
         </fieldset>
         {busy === "load" && (
@@ -393,11 +393,11 @@ export default function AiSettings({
       </form>
       <div className="ai-settings-footer">
         <a
-          href="https://ahhilai.top/docs#protocol"
+          href="https://api-docs.deepseek.com/zh-cn/"
           target="_blank"
           rel="noopener noreferrer"
         >
-          AHHil_AI 接入文档
+          DeepSeek 官方接入文档
           <ArrowUpRight size={12} />
         </a>
         {config?.enabled && (
