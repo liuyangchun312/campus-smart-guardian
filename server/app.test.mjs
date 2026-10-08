@@ -141,14 +141,27 @@ test("model connection works with Cloudflare supported redirect modes", async (t
   assert.equal(chat.body.text, "来自模拟 Chat 的答复");
 });
 
-test("chat accepts an upstream SSE reply even when stream false was requested", async (t) => {
+test("chat accepts an upstream SSE reply", async (t) => {
   const f = await fixture(t);
   await f.request("/api/ai/connect", f.config);
   f.rawResponse("text/event-stream", ': heartbeat\r\n\r\ndata: {"choices":[{"index":0,"delta":{"content":"你好"}}]}\r\n\r\ndata: {"choices":[{"index":0,"delta":{"content":"，校园"}}]}\r\n\r\ndata: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\r\n\r\ndata: [DONE]\r\n\r\n');
   const reply = await f.request("/api/chat", { messages: [{ role: "user", content: "你好" }] });
   assert.equal(reply.status, 200);
   assert.equal(reply.body.text, "你好，校园");
-  assert.equal(f.requests.at(-1).body.stream, false);
+  assert.equal(f.requests.at(-1).body.stream, true);
+});
+
+test("requests streaming replies from relays whose non-stream mode returns only usage", async (t) => {
+  const f = await fixture(t, { fetchImpl: async (_url, init) => {
+    if (!JSON.parse(init.body).stream) return new Response('data: {"choices":[],"usage":{"total_tokens":0}}\n\ndata: [DONE]\n\n', { headers: { "Content-Type": "text/event-stream" } });
+    const data = Buffer.from('data: {"choices":[{"index":0,"delta":{"content":"正常模型答复"}}]}\n\ndata: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n');
+    return new Response(new ReadableStream({ start(controller) { controller.enqueue(data.subarray(0, 61)); controller.enqueue(data.subarray(61)); controller.close(); } }), { headers: { "Content-Type": "text/event-stream" } });
+  } });
+  const connected = await f.request("/api/ai/connect", f.config);
+  assert.equal(connected.status, 200);
+  const reply = await f.request("/api/chat", { messages: [{ role: "user", content: "你好" }] });
+  assert.equal(reply.status, 200);
+  assert.equal(reply.body.text, "正常模型答复");
 });
 
 test("Responses connection accepts completed SSE response without duplicating deltas", async (t) => {

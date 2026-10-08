@@ -232,14 +232,14 @@ async function callModel(config, messages, probe, fetchImpl, sources = [], signa
         model: config.model,
         instructions,
         input: messages,
-        stream: false,
+        stream: true,
         store: false,
         max_output_tokens: probe ? 2048 : 4096,
       }
     : {
         model: config.model,
         messages: [{ role: "system", content: instructions }, ...messages],
-        stream: false,
+        stream: true,
       };
   if (/^gpt-5(?:[.-]|$)/.test(config.model)) {
     if (responses) body.reasoning = { effort: "low" };
@@ -249,7 +249,7 @@ async function callModel(config, messages, probe, fetchImpl, sources = [], signa
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Accept: "application/json, text/event-stream",
+      Accept: "text/event-stream, application/json",
       Authorization: `Bearer ${config.apiKey}`,
       "User-Agent": "CampusGuardian/1.0",
     },
