@@ -65,6 +65,31 @@ describe("巡检状态机", () => {
     expect(inspectionMarkdown(closed)).toContain("王老师");
     expect(inspectionMarkdown(closed)).toContain("不是行业统一标准");
   });
+  it("saves an explicit no-risk review, preserves it on reload and exports it after closure", () => {
+    const reviewed = transitionInspection(toReview(), { type: "review", review: { reviewer: "复核人", evidence: "现场复查未发现问题，记录编号 004", residualRatings: null, criticalResolved: true } }, now);
+    const closed = transitionInspection(reviewed, { type: "close" }, now);
+    expect(closed.review?.residualRatings).toBeNull();
+    expect(closed.ratings).toEqual(ratings);
+    expect(inspectionRisk(closed)).toMatchObject({ score: 0, level: "low", label: "无风险（未发现问题）" });
+    expect(isInspections(JSON.parse(JSON.stringify([closed])))).toBe(true);
+    expect(reviewed.timeline.at(-1)?.note).toContain("无风险（未发现问题）");
+    expect(inspectionMarkdown(closed)).toContain("残余风险：无风险（未发现问题）");
+    expect(inspectionMarkdown(closed)).toContain("残余 RPN：0");
+    expect(inspectionMarkdown(closed)).not.toContain("残余 S/O/D：");
+  });
+  it("requires evidence and resolution of critical failures for a no-risk review", () => {
+    const review = { reviewer: "复核人", evidence: "已现场复查", residualRatings: null, criticalResolved: true };
+    for (const invalid of [{ ...review, reviewer: " " }, { ...review, evidence: " " }, { ...review, criticalResolved: false }, { ...review, residualRatings: { severity: 0, occurrence: 0, detection: 0 } }]) {
+      expect(() => transitionInspection(toReview(), { type: "review", review: invalid }, now)).toThrow();
+    }
+    const failed = fixture({ answers: { ...fixture().answers, chemical: "failed" } });
+    const reviewing = toReview(failed);
+    expect(() => transitionInspection(reviewing, { type: "review", review: { ...review, criticalResolved: false } }, now)).toThrow();
+    const reviewed = transitionInspection(reviewing, { type: "review", review }, now);
+    expect(transitionInspection(reviewed, { type: "close" }, now).status).toBe("closed");
+    expect(isInspections([{ ...reviewed, review: { ...reviewed.review!, criticalResolved: false } }])).toBe(false);
+    expect(() => createInspection({ ...fixture(), ratings: null } as unknown as Inspection, now)).toThrow();
+  });
   it("blocks closure when severe residual consequences remain or a critical failure is not resolved", () => {
     const severe = transitionInspection(toReview(), { type: "review", review: { reviewer: "复核人", evidence: "后果仍严重", residualRatings: { severity: 4, occurrence: 1, detection: 1 }, criticalResolved: true } }, now);
     expect(() => transitionInspection(severe, { type: "close" }, now)).toThrow("残余风险");

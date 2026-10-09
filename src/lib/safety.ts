@@ -1,5 +1,6 @@
 export type SafetyAnswer = "unchecked" | "passed" | "failed";
 export type RiskRatings = { severity: number; occurrence: number; detection: number };
+export type ResidualRiskRatings = RiskRatings | null;
 export type ControlLevel = "elimination" | "substitution" | "engineering" | "administrative" | "ppe";
 export type SafetyTemplate = {
   id: string;
@@ -9,7 +10,7 @@ export type SafetyTemplate = {
   checks: { id: string; text: string; help: string; critical?: boolean }[];
 };
 export type Remediation = { owner: string; dueDate: string; action: string; control: ControlLevel; completionEvidence?: string };
-export type SafetyReview = { reviewer: string; evidence: string; residualRatings: RiskRatings; criticalResolved: boolean; at: string };
+export type SafetyReview = { reviewer: string; evidence: string; residualRatings: ResidualRiskRatings; criticalResolved: boolean; at: string };
 export type InspectionStatus = "registered" | "remediating" | "review" | "closed";
 export type Inspection = {
   id: string;
@@ -70,7 +71,8 @@ export const isRiskRatings = (value: unknown): value is RiskRatings => {
 };
 
 /** Project heuristic inspired by FMEA, not a standardized FMEA scale or safety certification. */
-export function getRisk(ratings: RiskRatings, criticalFailure = false): { score: number; level: "low" | "medium" | "high"; label: string; reason: string } {
+export function getRisk(ratings: ResidualRiskRatings, criticalFailure = false): { score: number; level: "low" | "medium" | "high"; label: string; reason: string } {
+  if (ratings === null) return { score: 0, level: criticalFailure ? "high" : "low", label: criticalFailure ? "高优先" : "无风险（未发现问题）", reason: criticalFailure ? "关键检查项尚未确认排除" : "本次复查未发现残余风险" };
   if (!isRiskRatings(ratings)) throw new Error("S、O、D 必须是 1–5 的整数。");
   const score = ratings.severity * ratings.occurrence * ratings.detection;
   const level = criticalFailure || ratings.severity >= 4 || score >= 50 ? "high" : score >= 20 ? "medium" : "low";
@@ -82,7 +84,7 @@ export function hasCriticalFailure(inspection: Pick<Inspection, "templateId" | "
 }
 
 export function inspectionRisk(inspection: Inspection) {
-  return getRisk(inspection.review?.residualRatings ?? inspection.ratings, hasCriticalFailure(inspection) && !inspection.review?.criticalResolved);
+  return getRisk(inspection.review ? inspection.review.residualRatings : inspection.ratings, hasCriticalFailure(inspection) && !inspection.review?.criticalResolved);
 }
 
 const validDate = (value: unknown): value is string => typeof value === "string" && value.length > 0 && Number.isFinite(Date.parse(value));
@@ -96,7 +98,7 @@ const isRemediation = (value: unknown): value is Remediation => {
 const isReview = (value: unknown): value is SafetyReview => {
   if (!value || typeof value !== "object") return false;
   const review = value as SafetyReview;
-  return nonempty(review.reviewer) && nonempty(review.evidence) && isRiskRatings(review.residualRatings) && typeof review.criticalResolved === "boolean" && validDate(review.at);
+  return nonempty(review.reviewer) && nonempty(review.evidence) && (review.residualRatings === null ? review.criticalResolved === true : isRiskRatings(review.residualRatings)) && typeof review.criticalResolved === "boolean" && validDate(review.at);
 };
 
 export function isOverdue(inspection: Inspection, now: Date = new Date()): boolean {
@@ -160,9 +162,10 @@ export function transitionInspection(inspection: Inspection, action: InspectionA
     case "review": {
       if (inspection.status !== "review") throw new Error("仅待复核记录可填写复核结论。");
       const review = { ...action.review, at: now };
-      if (!isReview(review)) throw new Error("请填写复核人、核验依据和有效的残余风险评分。");
-      next = { ...next, review: { ...review, reviewer: review.reviewer.trim(), evidence: review.evidence.trim(), residualRatings: { ...review.residualRatings } } };
-      note = `保存复核结论；复核人：${review.reviewer}；残余 RPN：${getRisk(review.residualRatings).score}`;
+      if (review.residualRatings === null && !review.criticalResolved) throw new Error("关键检查项尚未确认排除，不能记录为无风险。");
+      if (!isReview(review)) throw new Error("请填写复核人、核验依据，并选择无风险或填写有效的残余风险评分。");
+      next = { ...next, review: { ...review, reviewer: review.reviewer.trim(), evidence: review.evidence.trim(), residualRatings: review.residualRatings === null ? null : { ...review.residualRatings } } };
+      note = `保存复核结论；复核人：${review.reviewer}；${review.residualRatings === null ? "残余风险：无风险（未发现问题）；" : ""}残余 RPN：${getRisk(review.residualRatings).score}`;
       break;
     }
     case "return":
@@ -185,7 +188,11 @@ export function inspectionMarkdown(inspection: Inspection): string {
   const risk = getRisk(inspection.ratings, hasCriticalFailure(inspection));
   const sections = [`# 巡检与整改记录`, `编号：${inspection.id}\n地点：${inspection.site}\n场景：${template.name}\n检查人：${inspection.inspector}\n状态：${STATUS_LABELS[inspection.status]}\n登记时间：${inspection.createdAt}`, `## 检查结果\n${template.checks.map(({ id, text }) => `- ${inspection.answers[id] === "passed" ? "符合" : "不符合"}：${text}`).join("\n")}\n现场备注：${inspection.notes || "无"}`, `## 初始风险\nS=${inspection.ratings.severity} / O=${inspection.ratings.occurrence} / D=${inspection.ratings.detection}\nRPN=${risk.score}；${risk.label}；${risk.reason}`];
   if (inspection.remediation) sections.push(`## 整改\n责任人：${inspection.remediation.owner}\n期限：${inspection.remediation.dueDate}\n控制层级：${CONTROL_LEVELS.find(({ value }) => value === inspection.remediation!.control)?.label}\n措施：${inspection.remediation.action}\n完成说明：${inspection.remediation.completionEvidence || "尚未提交"}`);
-  if (inspection.review) sections.push(`## 复核\n复核人：${inspection.review.reviewer}\n核验依据：${inspection.review.evidence}\n残余 S/O/D：${inspection.review.residualRatings.severity}/${inspection.review.residualRatings.occurrence}/${inspection.review.residualRatings.detection}\n残余 RPN：${inspectionRisk(inspection).score}；${inspectionRisk(inspection).label}\n关键项已排除：${inspection.review.criticalResolved ? "是" : "否"}`);
+  if (inspection.review) {
+    const { reviewer, evidence, residualRatings, criticalResolved } = inspection.review;
+    const residual = residualRatings === null ? "残余风险：无风险（未发现问题）" : `残余 S/O/D：${residualRatings.severity}/${residualRatings.occurrence}/${residualRatings.detection}`;
+    sections.push(`## 复核\n复核人：${reviewer}\n核验依据：${evidence}\n${residual}\n残余 RPN：${inspectionRisk(inspection).score}；${inspectionRisk(inspection).label}\n关键项已排除：${criticalResolved ? "是" : "否"}`);
+  }
   sections.push(`## 流转记录\n${inspection.timeline.map(({ at, note }) => `- ${at}：${note}`).join("\n")}`, "## 方法边界\n采用 FMEA 思路的简化排序工具。S/O/D 1–5，RPN=S×O×D；RPN ≥ 50 为高优先，20–49 为中优先，其余常规；S ≥ 4 或关键项不符合直接高优先。量表、阈值与严重度优先规则均为本项目约定，不是行业统一标准。控制措施参考 NIOSH 控制层级。本地记录不等于已提交校方或专业安全评估。");
   return sections.join("\n\n");
 }

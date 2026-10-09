@@ -141,6 +141,13 @@ describe("待办与完成率口径", () => {
 });
 
 describe("CSV 导出", () => {
+  it("exports the no-risk review as zero while retaining its original risk score", () => {
+    const now = new Date(2026, 9, 2, 15);
+    const row = inspection({ status: "closed", review: { reviewer: "复核人", evidence: "现场复查未发现问题", residualRatings: null, criticalResolved: true, at: now.toISOString() } });
+    const csv = operationsCsv([], [row], "all", now);
+    expect(csv).toContain('"无风险（未发现问题）"');
+    expect(csv).toContain('"8","0"');
+  });
   it("escapes commas, quotes and multiline details", () => {
     expect(csvCell('a,b"c\nd')).toBe('"a,b""c\nd"');
     expect(toCsv([["地点", "描述"], ["宿舍", "门锁松动"]])).toBe('\uFEFF"地点","描述"\r\n"宿舍","门锁松动"\r\n');
