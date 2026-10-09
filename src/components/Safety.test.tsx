@@ -14,6 +14,22 @@ function render(selectedId: string | null, filter: "all" | "high" | "review" = "
 }
 
 describe("controlled inspection navigation", () => {
+  it("offers no risk only for the residual assessment", () => {
+    expect(render(reviewing.id)).toContain('type="checkbox"');
+    expect(render(reviewing.id)).toContain("无风险（未发现问题）");
+    expect(render(null)).not.toContain("无风险（未发现问题）");
+  });
+  it("restores a saved no-risk review with scoring omitted and closure available", () => {
+    const noRisk = transitionInspection(reviewing, { type: "review", review: { reviewer: "复核人", evidence: "复查未发现问题", residualRatings: null, criticalResolved: true } });
+    const markup = renderToStaticMarkup(<Safety inspections={[noRisk]} onChange={() => {}} notify={() => {}} selectedId={noRisk.id} onSelect={() => {}} view={{ search: "", filter: "all" }} onViewChange={() => {}} />);
+    expect(markup).toContain('type="checkbox"');
+    expect(markup).toContain('checked=""');
+    expect(markup).toContain("无风险（未发现问题）");
+    expect(markup).not.toContain('aria-label="残余后果严重度"');
+    expect(markup).not.toContain('aria-label="残余发生可能性"');
+    expect(markup).not.toContain('aria-label="残余发现难度"');
+    expect(markup).toContain("复核已记录，可以确认闭环");
+  });
   it("opens the selected inspection instead of a fresh form", () => {
     expect(render(initial.id)).toContain("现场检查记录");
     expect(render(initial.id)).not.toContain("登记现场巡检");
