@@ -47,4 +47,7 @@ describe("工单筛选", () => {
     const urgent = { ...order("urgent", "submitted", "特急"), school: metadata };
     expect(sortSchoolOrders([normal, urgent]).map(item => item.id)).toEqual(["urgent", "normal"]);
   });
+  it("excludes deleted official IDs even when an old personal draft is still saved", () => {
+    expect(mergeSchoolOrders(orders, [], ["BX-A", "BX-B"]).map(item => item.id)).toEqual(["BX-C"]);
+  });
 });

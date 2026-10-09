@@ -228,3 +228,67 @@ test("school processing persists with the injected cloud transaction adapter", a
   const saved = (await user.request("/api/orders")).body.orders[0];
   assert.equal(saved.status, "accepted"); assert.equal(saved.school.assignee, "云端维修组"); assert.equal(saved.school.revision, 2);
 });
+
+test("deleting a submitted repair hides only its owner's copy and preserves school handling", async (t) => {
+  const f = await fixture(t); await f.bootstrap(); const user = f.client(); const other = f.client();
+  await user.request("/api/auth/register", userForm()); await other.request("/api/auth/register", userForm("other_user"));
+  await saveRepair(user); await saveRepair(other);
+  const submitted = (await user.request("/api/orders", { id: "BX-SCHOOL-1" })).body.order;
+  await other.request("/api/orders", { id: "BX-SCHOOL-1" });
+  const workspace = (await user.request("/api/workspace")).body;
+  const deleted = await user.request("/api/orders/BX-SCHOOL-1", { revision: 1, ownerId: other.getId() }, "DELETE");
+  assert.equal(deleted.status, 200); assert.equal(deleted.body.deletedId, "BX-SCHOOL-1");
+  assert.deepEqual((await user.request("/api/orders")).body, { orders: [], deletedIds: ["BX-SCHOOL-1"] });
+  assert.equal((await other.request("/api/orders")).body.orders.length, 1);
+  assert.deepEqual((await other.request("/api/orders")).body.deletedIds, []);
+  assert.deepEqual((await user.request("/api/workspace")).body, workspace);
+  const queue = (await f.admin.request("/api/admin/orders")).body.orders;
+  assert.equal(queue.length, 2);
+  assert.deepEqual(queue.find(order => order.school.ownerId === user.getId()), submitted);
+  const path = `/api/admin/orders/${user.getId()}/BX-SCHOOL-1`;
+  const accepted = await f.admin.request(path, { action: "accept", revision: 1, assignee: "维修组" }, "PATCH");
+  assert.equal(accepted.status, 200); assert.equal(accepted.body.order.status, "accepted");
+  assert.equal(accepted.body.order.history.length, 2);
+  assert.equal((await user.request("/api/orders/BX-SCHOOL-1", { revision: 1 }, "DELETE")).status, 200);
+  assert.equal((await user.request("/api/orders", { id: "BX-SCHOOL-1" })).status, 409);
+  assert.equal((await user.request("/api/orders/BX-SCHOOL-1", { action: "confirm", revision: 2 }, "PATCH")).status, 404);
+  assert.equal((await user.request("/api/orders")).body.orders.length, 0);
+  assert.equal((await f.admin.request(path, { revision: 2 }, "DELETE")).status, 405);
+});
+
+test("submitted repair deletion requires an authenticated owner, request header and current revision", async (t) => {
+  const f = await fixture(t); await f.bootstrap(); const user = f.client(); const other = f.client();
+  assert.equal((await user.request("/api/orders/BX-SCHOOL-1", { revision: 1 }, "DELETE")).status, 401);
+  await user.request("/api/auth/register", userForm()); await other.request("/api/auth/register", userForm("other_user"));
+  await saveRepair(user); await user.request("/api/orders", { id: "BX-SCHOOL-1" });
+  assert.equal((await other.request("/api/orders/BX-SCHOOL-1", { revision: 1, ownerId: user.getId() }, "DELETE")).status, 404);
+  assert.equal((await user.request("/api/orders/BX-SCHOOL-1", { revision: 1 }, "DELETE", { "X-Guardian-Request": "" })).status, 403);
+  assert.equal((await user.request("/api/orders/BX-SCHOOL-1", { revision: 1 }, "DELETE", { Origin: "https://foreign.example" })).status, 403);
+  assert.equal((await user.request("/api/orders/BX-SCHOOL-1", { revision: 1 }, "DELETE", { "X-Guardian-User": other.getId() })).status, 401);
+  for (const revision of [undefined, "1", 0, -1, 1.5]) {
+    assert.equal((await user.request("/api/orders/BX-SCHOOL-1", { revision }, "DELETE")).status, 400);
+  }
+  assert.equal((await user.request("/api/orders/BX-SCHOOL-1/extra", { revision: 1 }, "DELETE")).status, 400);
+  assert.equal((await user.request("/api/orders/%ZZ", { revision: 1 }, "DELETE")).status, 400);
+  assert.equal((await user.request("/api/orders/missing", { revision: 1 }, "DELETE")).status, 404);
+  await f.admin.request(`/api/admin/orders/${user.getId()}/BX-SCHOOL-1`, { action: "accept", revision: 1, assignee: "维修组" }, "PATCH");
+  assert.equal((await user.request("/api/orders/BX-SCHOOL-1", { revision: 1 }, "DELETE")).status, 409);
+  assert.equal((await user.request("/api/orders")).body.orders[0].status, "accepted");
+  assert.deepEqual((await user.request("/api/orders")).body.deletedIds, []);
+  assert.equal((await user.request("/api/orders/BX-SCHOOL-1", { revision: 2 }, "DELETE")).status, 200);
+});
+
+for (const cloud of [false, true]) {
+  test(`submitted repair deletion persists across restart with ${cloud ? "injected cloud" : "local"} storage`, async (t) => {
+    const f = await fixture(t, { cloud }); await f.bootstrap(); const user = f.client();
+    await user.request("/api/auth/register", userForm()); await saveRepair(user);
+    await user.request("/api/orders", { id: "BX-SCHOOL-1" });
+    assert.equal((await user.request("/api/orders/BX-SCHOOL-1", { revision: 1 }, "DELETE")).status, 200);
+    await f.restart();
+    assert.deepEqual((await user.request("/api/orders")).body, { orders: [], deletedIds: ["BX-SCHOOL-1"] });
+    const schoolOrder = (await f.admin.request("/api/admin/orders")).body.orders[0];
+    assert.equal(schoolOrder.id, "BX-SCHOOL-1"); assert.equal(schoolOrder.history.length, 1); assert.equal(schoolOrder.school.revision, 1);
+    assert.equal((await user.request("/api/orders", { id: "BX-SCHOOL-1" })).status, 409);
+    assert.equal((await user.request("/api/orders/BX-SCHOOL-1", { revision: 1 }, "DELETE")).status, 200);
+  });
+}

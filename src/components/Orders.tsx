@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   ClipboardList,
@@ -46,7 +46,7 @@ export default function Orders({
 }: {
   orders: WorkOrder[];
   onAction: (id: string, action: "submit" | "confirm" | "reopen", note?: string) => Promise<boolean>;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => Promise<boolean>;
   onCreate: () => void;
   notify: (value: string) => void;
   selectedId: string | null;
@@ -60,6 +60,24 @@ export default function Orders({
 }) {
   const { label, storageLabel, description } = useDeployment();
   const selected = orders.find((order) => order.id === selectedId);
+  const deleting = useRef(false);
+  const mounted = useRef(false);
+  const selection = useRef({ selectedId, onSelect });
+  selection.current = { selectedId, onSelect };
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const remove = async (order: WorkOrder) => {
+    if (busy || loading || error || deleting.current) return;
+    const message = order.school
+      ? `确定从个人记录删除工单 ${order.id}（${order.location}）吗？删除后无法恢复。校方仍保留处理记录，报修不会被撤销。`
+      : `确定删除工单 ${order.id}（${order.location}）吗？删除后无法恢复。`;
+    if (!window.confirm(message)) return;
+    deleting.current = true;
+    try {
+      if (await onDelete(order.id) && mounted.current && selection.current.selectedId === order.id) selection.current.onSelect(null);
+    } catch { notify("删除失败，请重试。"); }
+    finally { deleting.current = false; }
+  };
+  const deleteDisabled = busy || loading || Boolean(error);
   const filtered = useMemo(() => filterOrders(orders, view), [orders, view]);
   const resetFilters = () => onViewChange({ ...view, search: "", filter: "all", priority: "all" });
   const tabs: { id: OrdersViewState["filter"]; label: string }[] = [
@@ -180,7 +198,7 @@ export default function Orders({
                 <td><span className={`status-badge ${order.status}`}>{orderStatusLabel(order)}</span></td>
                 <td><span className={`priority-badge ${order.priority === "特急" ? "danger" : order.priority === "紧急" ? "urgent" : ""}`}>{order.priority}</span></td>
                 <td><time dateTime={order.createdAt}>{formatDate(order.createdAt, true)}</time></td>
-                <td><div className="orders-row-actions"><button className="icon-button" title="复制工单" aria-label={`复制工单 ${order.id}`} onClick={() => void copy(order)}><Copy size={16} /></button><button className="icon-button" title="查看详情" aria-label={`查看工单 ${order.id}`} onClick={() => onSelect(order.id)}><ArrowRight size={16} /></button></div></td>
+                <td><div className="orders-row-actions"><button className="icon-button" title="复制工单" aria-label={`复制工单 ${order.id}`} onClick={() => void copy(order)}><Copy size={16} /></button><button className="icon-button" title="查看详情" aria-label={`查看工单 ${order.id}`} onClick={() => onSelect(order.id)}><ArrowRight size={16} /></button><button className="icon-button delete-button" title="删除工单" aria-label={`删除工单 ${order.id}`} disabled={deleteDisabled} onClick={() => void remove(order)}><Trash2 size={16} /></button></div></td>
               </tr>)}</tbody>
             </table>
           </div>
@@ -217,6 +235,7 @@ export default function Orders({
               <div className="order-card-footer">
                 <span>{order.id}</span>
                 <div>
+                  <button className="icon-button delete-button" title="删除工单" aria-label={`删除工单 ${order.id}`} disabled={deleteDisabled} onClick={() => void remove(order)}><Trash2 size={16} /></button>
                   <button
                     className="text-button"
                     onClick={() => void copy(order)}
@@ -265,21 +284,16 @@ export default function Orders({
           <UserOrderActions key={selected.id} order={selected} busy={busy} onAction={onAction} />
           {error && <p className="account-error" role="alert">{error}</p>}
           <div className="modal-actions">
-            {!selected.school && <button
+            <button
               className="text-button delete-button"
-              disabled={busy}
-              onClick={() => {
-                if (
-                  window.confirm("确定删除这张账号工单吗？删除后无法恢复。")
-                ) {
-                  onDelete(selected.id);
-                  onSelect(null);
-                }
-              }}
+              title="删除工单"
+              aria-label={`删除工单 ${selected.id}`}
+              disabled={deleteDisabled}
+              onClick={() => void remove(selected)}
             >
               <Trash2 size={15} />
               删除工单
-            </button>}
+            </button>
             <button
               className="button primary"
               onClick={() => void copy(selected)}
@@ -290,12 +304,12 @@ export default function Orders({
           </div>
         </Modal>
       )}
-      {selectedId !== null && !selected && !loading && !error && (
+      {selectedId !== null && !selected && !busy && !loading && !error && (
         <Modal title="工单不存在" onClose={() => onSelect(null)}>
           <div className="orders-missing"><ClipboardList size={30} /><p>当前账号中没有找到工单 <code>{selectedId}</code>。记录可能已删除，或链接属于其他账号。</p><button className="button outline" onClick={() => onSelect(null)}>返回工单列表</button></div>
         </Modal>
       )}
-      {selectedId !== null && !selected && !loading && error && <Modal title="工单进度暂不可用" onClose={() => onSelect(null)}><p className="account-error" role="alert">{error}</p><button className="button outline" onClick={onRefresh}><RefreshCw size={16} />重新读取工单</button></Modal>}
+      {selectedId !== null && !selected && !busy && !loading && error && <Modal title="工单进度暂不可用" onClose={() => onSelect(null)}><p className="account-error" role="alert">{error}</p><button className="button outline" onClick={onRefresh}><RefreshCw size={16} />重新读取工单</button></Modal>}
     </div>
   );
 }

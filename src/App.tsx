@@ -139,7 +139,12 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
   const workspace = useAccountWorkspace(initial);
   const { messages, orders: personalOrders, inspections } = workspace.data;
   const schoolOrders = useSchoolOrders();
-  const orders = mergeSchoolOrders(personalOrders, schoolOrders.orders);
+  const orders = mergeSchoolOrders(personalOrders, schoolOrders.orders, schoolOrders.deletedIds);
+  const [deletingOrder, setDeletingOrder] = useState(false);
+  const deletingOrderRef = useRef(false);
+  const accountLeaving = useRef(false);
+  const accountMounted = useRef(false);
+  useEffect(() => { accountMounted.current = true; return () => { accountMounted.current = false; }; }, []);
   const setMessages = (next: Message[] | ((previous: Message[]) => Message[])) => workspace.update("messages", next);
   const setOrders = (next: WorkOrder[] | ((previous: WorkOrder[]) => WorkOrder[])) => workspace.update("orders", next);
   const setInspections = (next: Inspection[] | ((previous: Inspection[]) => Inspection[])) => workspace.update("inspections", next);
@@ -251,9 +256,15 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
   };
   const signOut = async () => {
     if (busyRef.current) { notify("请等本次答复完成后退出，确保咨询记录完整保存。"); return; }
-    if (!(await workspace.flush())) { notify("还有记录未同步，请先导出备份或重试保存。"); return; }
-    try { await api("/api/auth/logout", {}); onExit(); }
+    if (deletingOrderRef.current) { notify("请等工单删除完成后退出，确保记录保存到当前账号。"); return; }
+    if (accountLeaving.current) return;
+    accountLeaving.current = true;
+    try {
+      if (!(await workspace.flush())) { notify("还有记录未同步，请先导出备份或重试保存。"); return; }
+      await api("/api/auth/logout", {}); onExit();
+    }
     catch (e) { if (e instanceof ApiError && e.status === 401) onExit(); else notify("退出失败，请检查本机服务后重试。"); }
+    finally { accountLeaving.current = false; }
   };
   const importLegacy = () => {
     try {
@@ -443,6 +454,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
     notify("报修草稿已保存，请核对后点击“提交给学校”");
   };
   const actOnOrder = async (id: string, action: "submit" | "confirm" | "reopen", note?: string) => {
+    if (deletingOrderRef.current || accountLeaving.current) return false;
     try {
       if (action === "submit") {
         if (!(await workspace.flush())) { notify("草稿尚未同步，请重试保存后再提交。"); return false; }
@@ -455,6 +467,26 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
       notify(action === "submit" ? "工单已提交到学校，等待管理员受理" : action === "confirm" ? "已确认完成，处理记录已保存" : "反馈已发送给校方，工单继续处理");
       return true;
     } catch (e) { notify(e instanceof Error ? e.message : "工单操作失败，请重试。"); return false; }
+  };
+  const deleteOrder = async (id: string) => {
+    if (deletingOrderRef.current || accountLeaving.current || schoolOrders.busy || schoolOrders.loading || schoolOrders.error) return false;
+    const order = orders.find(item => item.id === id);
+    if (!order) return false;
+    deletingOrderRef.current = true; setDeletingOrder(true);
+    try {
+      if (order.school) await schoolOrders.remove(order);
+      if (!accountMounted.current) return false;
+      setOrders(previous => previous.filter(item => item.id !== id));
+      const synced = await workspace.flush();
+      if (!synced && !order.school) {
+        setOrders(previous => previous.some(item => item.id === id) ? previous : [order, ...previous]);
+        notify("删除尚未保存，请同步账号记录后重试。");
+        return false;
+      }
+      notify(order.school ? "工单已从个人记录删除，校方仍保留处理记录" : "工单已从当前账号删除");
+      return true;
+    } catch (e) { notify(e instanceof Error ? e.message : "删除失败，请重试。"); return false; }
+    finally { deletingOrderRef.current = false; setDeletingOrder(false); }
   };
 
   return (
@@ -679,17 +711,11 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
               view={ordersView}
               onViewChange={changeOrdersView}
               onAction={actOnOrder}
-              busy={schoolOrders.busy}
+              busy={schoolOrders.busy || deletingOrder}
               loading={schoolOrders.loading}
               error={schoolOrders.error}
               onRefresh={() => void schoolOrders.refresh()}
-              onDelete={(id) => {
-                if (schoolOrders.orders.some(order => order.id === id)) { notify("已提交校方的工单需保留处理记录，不能删除。"); return; }
-                setOrders((previous) =>
-                  previous.filter((order) => order.id !== id),
-                );
-                notify("工单已从当前账号删除");
-              }}
+              onDelete={deleteOrder}
               onCreate={() => navigate("repair")}
               notify={notify}
             />

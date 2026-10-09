@@ -1,6 +1,11 @@
 .safety-page{max-width:1510px;margin:0 auto;padding:8px 0 44px;color:var(--ink)}
 .safety-page,.safety-page *{letter-spacing:0}
-.safety-detail-toolbar{display:flex;justify-content:flex-end;margin-bottom:12px}
+.safety-detail-toolbar{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.safety-delete{display:inline-flex;align-items:center;justify-content:center;width:41px;height:41px;flex-shrink:0;border:1px solid light-dark(#e6cdc5,#68433b);border-radius:7px;background:light-dark(#fff,#19281f);color:light-dark(#a44f40,#efafa0)}
+.safety-delete:hover{background:light-dark(#fcf0ec,#39251f);border-color:light-dark(#c48f80,#aa6c5d)}
+.safety-record-entry{position:relative;min-width:0}
+.safety-record-entry .safety-record{padding-right:50px}
+.safety-record-entry>.safety-delete{position:absolute;right:4px;top:10px;width:36px;height:36px;border-radius:6px}
 .safety-card-heading{flex-wrap:wrap}
 .safety-card-heading>div{flex:1;min-width:160px}
 .safety-record>strong svg,.safety-register-footnote>svg{flex-shrink:0}

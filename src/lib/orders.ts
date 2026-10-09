@@ -9,8 +9,8 @@ export function orderStatusLabel(order: WorkOrder) {
   if (!order.school && order.status === "resolved") return "历史记录 · 已标记解决";
   return statusLabels[order.status];
 }
-export function mergeSchoolOrders(personal: WorkOrder[], school: WorkOrder[]) {
-  const submittedIds = new Set(school.map(order => order.id));
+export function mergeSchoolOrders(personal: WorkOrder[], school: WorkOrder[], deletedIds: string[] = []) {
+  const submittedIds = new Set([...school.map(order => order.id), ...deletedIds]);
   return [...school, ...personal.filter(order => !submittedIds.has(order.id))].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 export function sortSchoolOrders(orders: WorkOrder[]) {

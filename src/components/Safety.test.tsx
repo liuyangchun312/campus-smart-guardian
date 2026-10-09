@@ -34,4 +34,15 @@ describe("controlled inspection navigation", () => {
     expect(render(null)).toContain("账号服务数据库");
     expect(render(null)).not.toContain("本机保存");
   });
+  it("offers a named delete action in the selected inspection toolbar", () => {
+    const toolbar = render(initial.id).match(/<div class="safety-detail-toolbar">([\s\S]*?)<\/div>/)?.[1];
+    expect(toolbar).toContain('aria-label="删除巡检记录：测试地点"');
+    expect(toolbar).toContain('title="删除巡检记录"');
+  });
+  it("offers a named delete action for every inspection in the register", () => {
+    const markup = render(null);
+    for (const site of ["测试地点", "待复核地点", "已闭环地点"]) {
+      expect(markup).toContain(`aria-label="删除巡检记录：${site}"`);
+    }
+  });
 });
