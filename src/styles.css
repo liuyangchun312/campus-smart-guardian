@@ -3,18 +3,11 @@
   font-family:var(--ui-face);
   font-weight:400;
   font-variant-numeric:tabular-nums;
-  color:light-dark(#293c33,#dbe9de);
-  background:light-dark(#f6f7f4,#1e2e24);
+  color:var(--ink);
+  background:var(--canvas);
   font-synthesis:none;
   text-rendering:optimizeLegibility;
   -webkit-font-smoothing:antialiased;
-  --forest: #284f40;
-  --forest-deep: #203e33;
-  --ink: #293c33;
-  --muted: #879087;
-  --line: #e9ece5;
-  --paper: #fff;
-  --sage: #e9eee3;
   font-size:14px;
 }
 * {

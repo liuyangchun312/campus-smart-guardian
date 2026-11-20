@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, ArrowUpRight, BookOpen, Calculator, CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, Clock3, FileSearch, FlaskConical, MessageCircle, Plus, ShieldCheck, TriangleAlert, Wrench } from "lucide-react";
+import { ArrowRight, ArrowUpRight, BookOpen, Calculator, CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, FileSearch, FlaskConical, MessageCircle, Plus, ShieldCheck, TriangleAlert, Wrench } from "lucide-react";
 import type { Page, WorkOrder } from "../types";
 import type { Inspection } from "../lib/safety";
 import { localDateKey, pendingTasks, summarizeOperations } from "../lib/operations";
@@ -46,7 +46,7 @@ export default function Home({ name, navigate, openRecord, ask, openTool, orders
   ];
 
   return (
-    <div className="workbench-home page-enter">
+    <div className="workbench-home">
       <header className="wb-heading">
         <div className="wb-hero-copy">
           <time className="wb-date" dateTime={localDateKey(now)}>
@@ -71,7 +71,7 @@ export default function Home({ name, navigate, openRecord, ask, openTool, orders
         {metrics.map(({ label: title, value, icon: Icon, page, filter, tone }) => (
           <button className={`wb-metric tone-${tone}`} key={title} onClick={() => navigate(page, { filter })} aria-label={`${title} ${value} 条，查看记录`}>
             <span className="wb-metric-icon" aria-hidden="true"><Icon size={19} /></span>
-            <span className="wb-metric-status" aria-hidden="true"><i /><ArrowUpRight size={13} /></span>
+            <ArrowUpRight className="wb-metric-arrow" size={16} aria-hidden="true" />
             <span className="wb-metric-label">{title}</span>
             <span className="wb-metric-value"><strong className="numeric">{value}</strong><small>条</small></span>
           </button>
@@ -100,24 +100,16 @@ export default function Home({ name, navigate, openRecord, ask, openTool, orders
             </div>
           ) : (
             <div className="wb-empty">
-              <ClipboardCheck size={23} strokeWidth={1.6} aria-hidden="true" />
               <p>{activities.length ? "当前没有待跟进事项" : "暂无待办记录"}</p>
-              <div className="wb-empty-actions">
-                <button onClick={() => navigate("operations")}><ArrowUpRight size={14} aria-hidden="true" />快速待办</button>
-                <button onClick={() => navigate("orders")}><ClipboardList size={14} aria-hidden="true" />我的工单</button>
-              </div>
+              <button className="text-button" onClick={() => navigate("operations")}>查看运行看板<ArrowRight size={14} aria-hidden="true" /></button>
             </div>
           )}
-          {tasks.length > 6 && <button className="text-button wb-more" onClick={() => navigate("operations")}><span>查看全部 <span className="numeric">{tasks.length}</span> 条待办</span><ArrowRight size={14} /></button>}
         </section>
 
         <section className="wb-ledger-panel" aria-labelledby="wb-recent-title">
           <header className="wb-section-heading">
             <h2 id="wb-recent-title">最近记录</h2>
-            {activities.length > 0 && <div className="wb-record-links">
-              <button className="text-button" onClick={() => navigate("orders", { filter: "all" })}>全部工单<ArrowUpRight size={13} /></button>
-              <button className="text-button" onClick={() => navigate("safety", { filter: "all" })}>全部巡检<ArrowUpRight size={13} /></button>
-            </div>}
+            {activities.length > 0 && <button className="text-button" onClick={() => navigate("orders", { filter: "all" })}>全部工单<ArrowRight size={14} /></button>}
           </header>
           {activities.length ? (
             <div className="wb-activity-list">
@@ -131,12 +123,8 @@ export default function Home({ name, navigate, openRecord, ask, openTool, orders
             </div>
           ) : (
             <div className="wb-empty">
-              <Clock3 size={23} strokeWidth={1.6} aria-hidden="true" />
               <p>暂无报修或巡检记录</p>
-              <div className="wb-empty-actions">
-                <button onClick={() => navigate("repair")}><Plus size={14} aria-hidden="true" />新建报修</button>
-                <button onClick={() => navigate("safety", { filter: "all" })}><ShieldCheck size={14} aria-hidden="true" />全部巡检</button>
-              </div>
+              <button className="text-button" onClick={() => navigate("safety", { filter: "all" })}>查看安全巡检<ArrowRight size={14} aria-hidden="true" /></button>
             </div>
           )}
         </section>
@@ -145,16 +133,14 @@ export default function Home({ name, navigate, openRecord, ask, openTool, orders
       <section className="wb-tools" aria-labelledby="wb-tools-title">
         <header className="wb-section-heading">
           <h2 id="wb-tools-title">常用工具</h2>
-          <div className="wb-record-links">
-            <button className="text-button" onClick={() => navigate("knowledge")}><FileSearch size={14} />循证检索</button>
-            <button className="text-button" onClick={() => navigate("research")}><FlaskConical size={14} />方法与依据</button>
-          </div>
         </header>
         <div className="wb-quick">
-          <button onClick={() => navigate("chat")}><MessageCircle size={20} /><span>智能咨询</span><ArrowUpRight size={14} /></button>
-          <button onClick={() => openTool("calculator")}><Calculator size={20} /><span>加班费计算</span><ArrowUpRight size={14} /></button>
-          <button onClick={() => openTool("evidence")}><ClipboardCheck size={20} /><span>维权证据清单</span><ArrowUpRight size={14} /></button>
-          <button onClick={() => ask("学校组织的勤工助学，工作时间和报酬应该如何约定？")}><BookOpen size={20} /><span>勤工助学指引</span><ArrowUpRight size={14} /></button>
+          <button onClick={() => navigate("chat")}><span className="wb-tool-icon" aria-hidden="true"><MessageCircle size={18} /></span><span>智能咨询</span><ArrowUpRight size={14} aria-hidden="true" /></button>
+          <button onClick={() => openTool("calculator")}><span className="wb-tool-icon" aria-hidden="true"><Calculator size={18} /></span><span>加班费计算</span><ArrowUpRight size={14} aria-hidden="true" /></button>
+          <button onClick={() => openTool("evidence")}><span className="wb-tool-icon" aria-hidden="true"><ClipboardCheck size={18} /></span><span>维权证据清单</span><ArrowUpRight size={14} aria-hidden="true" /></button>
+          <button onClick={() => ask("学校组织的勤工助学，工作时间和报酬应该如何约定？")}><span className="wb-tool-icon" aria-hidden="true"><BookOpen size={18} /></span><span>勤工助学指引</span><ArrowUpRight size={14} aria-hidden="true" /></button>
+          <button onClick={() => navigate("knowledge")}><span className="wb-tool-icon" aria-hidden="true"><FileSearch size={18} /></span><span>循证检索</span><ArrowUpRight size={14} aria-hidden="true" /></button>
+          <button onClick={() => navigate("research")}><span className="wb-tool-icon" aria-hidden="true"><FlaskConical size={18} /></span><span>方法与依据</span><ArrowUpRight size={14} aria-hidden="true" /></button>
         </div>
       </section>
     </div>
