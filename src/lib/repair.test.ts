@@ -26,6 +26,44 @@ describe("工单安全分类", () => {
     expect(order.category).toBe("水电与暖通");
     expect(order.safety).toContain("防滑");
   });
+  it("keeps a fixture defect ordinary when the pipe leak is ruled out", () => {
+    expect(classifyRepair("洗手池松动，未发现水管漏水。").priority).toBe("普通");
+  });
+  it.each([
+    "教学楼洗手池水管漏水，积水没有流到插座旁。",
+    "水管漏水，积水尚未靠近配电箱。",
+    "水管漏水，未发现积水流到插座旁。",
+    "水管漏水，电源线没有泡在积水里。",
+    "水管漏水，积水没有靠近插座，插座也未冒烟。",
+    "水管漏水，积水尚未靠近插座，也未发现插座有火花。",
+    "水管漏水，积水流到了地漏，另一个房间的插座需要更换。",
+    "水管漏水，维修人员靠近插座检查。",
+    "水管漏水，地上有积水，千万不要靠近插座。",
+    "水管漏水，请不要让积水靠近插座。",
+    "水管漏水，积水没有流到墙边的插座。",
+  ])("keeps a leak urgent when electrical exposure is denied or unrelated: %s", (input) => {
+    const order = classifyRepair(input);
+    expect(order.priority).toBe("紧急");
+    expect(order.safety).toContain("防滑");
+  });
+  it.each([
+    "教学楼洗手池水管漏水，积水已经流到插座旁。",
+    "教学楼水管漏水，已经流到墙边的插座。",
+    "水管漏水，积水 已经顺着墙面流到了 旁边的两个插座。",
+    "电源线正泡在地上的积水里。",
+    "水管漏水，电源线泡在地面积水里。",
+    "洗手池下面漏水，插座旁边已经有积水。",
+    "地上积水正在靠近排插。",
+    "水管漏水，积水已经靠近墙角插座。",
+    "水管漏水已流到墙上的开关。",
+    "插座被积水浸泡。",
+    "积水没有流到插座旁，但是另一个插座正在冒烟。",
+    "水管漏水，积水还没流到插座但已经流到了配电箱旁。",
+  ])("escalates an affirmed electrical hazard wherever it occurs: %s", (input) => {
+    const order = classifyRepair(input);
+    expect(order.priority).toBe("特急");
+    expect(order.safety).toContain("断电");
+  });
 });
 
 describe("报修地点提取", () => {

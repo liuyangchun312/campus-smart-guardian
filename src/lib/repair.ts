@@ -1,7 +1,7 @@
 import type { WorkOrder } from "../types";
 
-export type RepairDraft = { description: string; location: string; category: string; priority: WorkOrder["priority"] };
-export const emptyRepairDraft: RepairDraft = { description: "", location: "", category: "水电与暖通", priority: "普通" };
+export type RepairDraft = { description: string; location: string; category: string; priority?: WorkOrder["priority"] };
+export const emptyRepairDraft: RepairDraft = { description: "", location: "", category: "水电与暖通" };
 export type RepairErrors = Partial<Record<"description" | "location", string>>;
 
 export function validateRepairDraft(draft: Pick<RepairDraft, "description" | "location">): RepairErrors {
@@ -25,38 +25,68 @@ export function extractRepairLocation(description: string): string {
   return description.match(new RegExp(`${district}${building}${floor}${room}`, "u"))?.[0].trim().replace(/^(?:我在|位于|发生在)\s*/, "") ?? "";
 }
 
+const electricalDevice = "(?:插座|排插|插排|插线板|接线板|电源(?:线)?|电线|开关|配电(?:箱|柜|盘)|电箱)";
+const negatedDeviceObservation = new RegExp(
+  `(?:没有|没|未)(?:发现|看到|观察到|见到|见)${electricalDevice}(?:明显|正在|有|在)?$`,
+);
+
+export function hasActiveRisk(description: string, pattern: RegExp): boolean {
+  return [...description.matchAll(new RegExp(pattern.source, "g"))].some((match) => {
+    const before = description.slice(Math.max(0, match.index! - 30), match.index);
+    const clause = before.split(/[，。；！？,;!?\n]/).pop() ?? "";
+    const negated = /(?:没有|无|没|未|不是|不会|不要|不|别|不存在|避免|防止|预防)(?:明显的?|发现|出现|发生过?|任何|情况是|发生的|看到|闻到|正在|在|让|有)*\s*$/.test(clause);
+    const negatedList = /(?:没有|无|没|未)(?:发现|出现|看到)?(?:漏电|触电|短路|火花|焦味|冒烟|起火|着火)(?:\s*[、和及或与]\s*(?:漏电|触电|短路|火花|焦味|冒烟|起火|着火))*\s*[、和及或与]\s*$/.test(clause);
+    return !negated && !negatedList && !negatedDeviceObservation.test(clause);
+  });
+}
+
+export function hasWaterLeak(description: string): boolean {
+  return hasActiveRisk(description, /(?:水管|水龙头|洗手池)?(?:持续|正在|大量)?漏水(?!传感器|报警器|探测器|检测)/);
+}
+
+const adverbs = "(?:已经?|正在?|仍然?|仍在|还在|逐渐|慢慢|直接|开始|也|又|都)*";
+const route = "(?:(?:顺着|沿着)(?:墙面|墙边|墙角|地面|管道))?";
+const qualifier = "(?:[^没未无不但、，,]{1,8}的|墙上|墙边|墙角|地面)?";
+const deviceCount = "(?:[这那]?[一二三四五六七八九十两\\d]+个|[这那]个)?";
+const reachesDevice = `${route}(?:流[到入进向]|淹[到没]|漫[到过]|渗[到入进]|溅到|靠近|接触到?|浸泡|泡着)了?${qualifier}${deviceCount}${electricalDevice}`;
+const waterExposure = new RegExp([
+  `(?:积水|漏水|水流|水)${adverbs}${reachesDevice}`,
+  `${electricalDevice}${adverbs}(?:泡在|浸泡在|浸在|掉进|落在|靠近)${qualifier}(?:地面|地上)?(?:积水|水里|水中)`,
+  `${electricalDevice}${adverbs}被(?:积水|水)(?:浸泡|淹没)`,
+  `${electricalDevice}(?:旁边?|附近|周围|边上)${adverbs}(?:有|出现|形成|全是)了?积水`,
+].join("|"));
+const impliedWaterExposure = new RegExp(`^${adverbs}${reachesDevice}`);
+
+export function hasWaterExposure(description: string): boolean {
+  for (const sentence of description.split(/[。；！？.;!?\n]/)) {
+    let previousMentionsWater = false;
+    for (const part of sentence.split(/[，,]|但是|不过|然而|而是|并且|而且|但|却/)) {
+      const clause = part.replace(/\s+/g, "");
+      if (!clause) continue;
+      if (hasActiveRisk(clause, waterExposure)) return true;
+      // “水管漏水，已流到插座” keeps the water subject across adjacent clauses.
+      if (previousMentionsWater && impliedWaterExposure.test(clause)) return true;
+      previousMentionsWater = hasActiveRisk(clause, /积水|漏水|水流|地上的水/);
+    }
+  }
+  return false;
+}
+
 export function classifyRepair(description: string) {
-  const active = (pattern: RegExp) =>
-    [...description.matchAll(new RegExp(pattern.source, "g"))].some((match) => {
-      const clause =
-        description
-          .slice(Math.max(0, match.index! - 30), match.index)
-          .split(/[，。；！？,;!?\n]/)
-          .pop() ?? "";
-      return (
-        !/(?:没有|并无|未发现|未出现|未发生|无|没|不是|不存在)(?:明显的?|发现|出现|发生|任何|看到|闻到)*\s*$/.test(
-          clause,
-        ) &&
-        !/(?:没有|并无|未发现|无|没)(?:发现|出现)?(?:漏电|触电|短路|火花|焦味|冒烟|起火|着火)(?:[、和及或与](?:漏电|触电|短路|火花|焦味|冒烟|起火|着火))*[、和及或与]$/.test(
-          clause,
-        )
-      );
-    });
   const electrical =
-    active(
+    hasActiveRisk(
+      description,
       /漏电|触电|短路|火花|焦味|焦糊味|冒烟|起火|着火|电线裸露|电线掉落/,
-    ) ||
-    (/积水|漏水/.test(description) &&
-      /流到|淹到|泡在|泡着|浸泡|靠近/.test(description) &&
-      /插座|电源|电线|电箱/.test(description));
-  const gas = active(
+    ) || hasWaterExposure(description);
+  const gas = hasActiveRisk(
+    description,
     /(?:燃气|煤气|天然气|气体)(?:有)?(?:泄漏|漏气|异味)|闻到.{0,8}(?:燃气|煤气)|疑似.{0,8}(?:燃气|煤气)/,
   );
-  const trapped = active(/被困|困在|电梯困人/);
+  const trapped = hasActiveRisk(description, /被困|困在|电梯困人/);
   const priority =
     electrical || gas || trapped
       ? "特急"
-      : /漏水|停水|停电|堵塞|门打不开|无法开门/.test(description)
+      : hasWaterLeak(description) || /停水|停电|堵塞|门打不开|无法开门/.test(description)
         ? "紧急"
         : "普通";
   const category = /门禁|感应卡|刷卡/.test(description)

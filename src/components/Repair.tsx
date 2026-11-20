@@ -14,6 +14,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { classifyRepair, extractRepairLocation, validateRepairDraft, type RepairDraft } from "../lib/repair";
+import { createDraftOrder, effectiveRepairPriority } from "../lib/orders";
 import { useDeployment } from "../lib/deployment";
 import type { WorkOrder } from "../types";
 import "./orders.css";
@@ -35,7 +36,7 @@ export default function Repair({
   const errors = attempted ? validateRepairDraft(draft) : {};
   const [extracted, setExtracted] = useState(false);
   const assessment = classifyRepair(description);
-  const effectivePriority = assessment.priority === "特急" ? "特急" : priority;
+  const effectivePriority = effectiveRepairPriority(assessment.priority, priority);
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     setAttempted(true);
@@ -44,18 +45,7 @@ export default function Repair({
       document.getElementById(invalid.description ? "repair-description" : "repair-location")?.focus();
       return;
     }
-    const now = new Date().toISOString();
-    onSave({
-      id: `BX-${new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()).replaceAll("-", "")}-${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`,
-      category,
-      location: location.trim(),
-      description: description.trim(),
-      priority: effectivePriority,
-      safety: assessment.safety,
-      status: "draft",
-      createdAt: now,
-      history: [{ status: "draft", at: now }],
-    });
+    onSave(createDraftOrder(draft));
   };
   return (
     <div className="page-enter repair-page">
@@ -105,7 +95,7 @@ export default function Repair({
               className="text-button accent"
               disabled={description.trim().length < 4}
               onClick={() => {
-                onDraftChange({ ...draft, category: assessment.category, priority: assessment.priority,
+                onDraftChange({ ...draft, category: assessment.category, priority: undefined,
                   location: location.trim() ? location : extractRepairLocation(description) });
                 setExtracted(true);
               }}

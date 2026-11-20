@@ -159,3 +159,32 @@
 @media (max-width: 380px) {
   .repair-page .category-options { grid-template-columns: minmax(0, 1fr); }
 }
+.order-inspection-source {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  margin: 1rem 0;
+  padding: .8rem 1rem;
+  border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--forest);
+  border-radius: .65rem;
+  color: var(--ink);
+  background: var(--surface-soft, var(--sage));
+  text-decoration: none;
+}
+.order-inspection-source > span:first-of-type { display: grid; gap: .15rem; min-width: 0; }
+.order-inspection-source strong { overflow-wrap: anywhere; }
+.order-inspection-source small { color: var(--muted); }
+.order-inspection-source > span:last-child { display: inline-flex; align-items: center; gap: .3rem; margin-inline-start: auto; white-space: nowrap; font-weight: 600; }
+.order-inspection-source:hover, .order-inspection-source:focus-visible { text-decoration: underline; }
+
+.orders-page .modal { max-width: 620px; scroll-padding-block: 5rem 1.25rem; }
+.orders-page .modal > .modal-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  padding: 15px clamp(16px, 3vw, 28px);
+}
+.orders-page .modal .modal-body { padding-inline: clamp(16px, 3vw, 28px); }
+.orders-page .modal .order-details :is(dt, dd) { font-size: .95rem; }
+.orders-page .modal .timeline small { font-size: .85rem; }

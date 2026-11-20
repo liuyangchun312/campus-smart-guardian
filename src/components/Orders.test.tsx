@@ -8,6 +8,13 @@ const official = (status: WorkOrder["status"]): WorkOrder => ({ ...draft, status
 const render = (order: WorkOrder | undefined, busy = false) => renderToStaticMarkup(<Orders orders={order ? [order] : []} selectedId={order?.id ?? draft.id} onSelect={() => {}} view={{ search: "", filter: "all", priority: "all", layout: "list" }} onViewChange={() => {}} onAction={async () => true} onDelete={async () => true} onCreate={() => {}} notify={() => {}} busy={busy} loading={false} error="" onRefresh={() => {}} />);
 
 describe("用户校方工单操作", () => {
+  it("links an official order back to the owner's original inspection", () => {
+    const order = official("awaiting_confirmation");
+    const markup = renderToStaticMarkup(<Orders orders={[order]} selectedId={order.id} onSelect={() => {}} view={{ search: "", filter: "all", priority: "all", layout: "list" }} onViewChange={() => {}} onAction={async () => true} onDelete={async () => true} onCreate={() => {}} notify={() => {}} busy={false} loading={false} error="" onRefresh={() => {}} sourceInspection={{ id: "inspection-123", site: "西区机房" }} />);
+    expect(markup).toContain('href="#safety?record=inspection-123"');
+    expect(markup).toContain("西区机房");
+    expect(render(order)).not.toContain('href="#safety?record=');
+  });
   it("offers explicit submission for private drafts and legacy submitted records", () => {
     expect(render(draft)).toContain("提交给学校");
     expect(render({ ...draft, status: "submitted" })).toContain("尚未进入本站校方队列");

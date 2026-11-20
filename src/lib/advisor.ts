@@ -1,3 +1,5 @@
+import { hasActiveRisk, hasWaterExposure, hasWaterLeak } from "./repair";
+
 export type Topic = "rights" | "repair" | "safety" | "general";
 
 export type Advice = {
@@ -210,9 +212,9 @@ function repairAdvice(input: string): Advice {
         ? "强电 / 照明"
         : "公共设施维修";
   const urgent =
-    /停电|停水|跳闸|无法进|进不去|被困|大量漏水|水流不停|无法关闭|不能关闭|大面积|整栋/.test(
+    /停电|停水|跳闸|无法进|进不去|被困|水流不停|无法关闭|不能关闭|大面积|整栋/.test(
       input,
-    );
+    ) || hasWaterLeak(input);
   return result(
     "repair",
     `💡 **核心结论**\n已为您整理一份 **报修工单草稿**，可复制到学校现有报修渠道。${urgent ? "故障已影响正常使用，建议尽快联系值班人员。" : "请补齐准确点位，方便维修师傅一次找到现场。"}\n\n📋 **报修工单草稿 · 尚未提交**\n- 【工单类型】：${kind}\n- 【发生区域】：${extractLocation(input)}\n- 【故障描述】：${summarize(input)}\n- 【紧急级别】：${urgent ? "紧急 · 影响正常生活 / 使用" : "普通 · 待核实现场情况"}\n- 【一线作业安全提示】：${electric ? "停止使用故障设备，不私拆插座或配电箱；由有资质人员按停电、验电规程处置。" : water ? "避开湿滑积水；只有确认安全且熟悉操作时才关闭就近水阀，积水靠近电源时不要踏入。" : sensor ? "保留设备编号与告警时间；不要屏蔽消防告警或绕过门禁，先核实人员与现场安全。" : "设置现场提示，避免继续使用损坏设施，由专业人员检查后恢复。"}\n\n🛠️ **实操指引与步骤**\n**第一步：** 补充校区、楼栋、房间 / 设备编号，以及故障开始时间。\n**第二步：** 在安全位置记录现象，说明影响范围、是否有人员被困，以及是否冒烟、漏电或漏水靠近电源。\n**第三步：** 将草稿提交到学校官方报修入口或交给宿管 / 值班人员，并保存真实受理编号跟进。\n\n⚠️ **防坑 / 维权证据提示**\n本页面没有连接学校派单系统，不会自动提交、通知维修师傅或生成真实受理编号。无需在公开对话中提供身份证、门禁密码等信息。\n\n❤️ **暖心提示**\n描述“在哪儿、哪里坏、有什么现象”就够了，不必自己判断故障原因。请先确保安全，再等待专业维修。`,
@@ -429,7 +431,7 @@ export function getLocalReply(
       !/没有.{0,18}(?:混|倒在一起)/.test(fresh));
   if (chemicalCurrent)
     return addReference(chemicalAdvice(true), sources.chemical);
-  const dangerousElectric = activeHazard(
+  const dangerousElectric = hasActiveRisk(
     fresh,
     /冒烟|火花|触电|漏电|起火|着火|电线裸露|电线掉落/,
   );
@@ -441,16 +443,12 @@ export function getLocalReply(
     /昨天|前天|上周|上个月|去年|此前|已经出院|治疗后/.test(fresh) &&
     /工伤|认定|赔偿|报销|医疗费/.test(fresh) &&
     !/现在|正在|仍在|还在|目前/.test(fresh);
-  const waterElectric =
-    /积水|漏水/.test(fresh) &&
-    /靠近|流到|淹到|接触|泡在|泡着|浸泡/.test(fresh) &&
-    /插座|电源|配电|电线|电箱/.test(fresh);
   if (
     (dangerousElectric &&
       !safetyQuestion &&
       !historicalInjury &&
       /电|插座|设备|冒烟|火花|着火|起火/.test(fresh)) ||
-    waterElectric
+    hasWaterExposure(fresh)
   )
     return addReference(electricalEmergency(fresh), sources.electrical);
   if (

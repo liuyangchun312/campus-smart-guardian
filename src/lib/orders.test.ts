@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WorkOrder } from "../types";
-import { filterOrders, mergeSchoolOrders, orderStatusLabel, sortSchoolOrders } from "./orders";
+import { createDraftOrder, filterOrders, mergeSchoolOrders, orderStatusLabel, sortSchoolOrders } from "./orders";
+import { emptyRepairDraft } from "./repair";
 
 const order = (id: string, status: WorkOrder["status"], priority: WorkOrder["priority"]): WorkOrder => ({
   id,
@@ -50,4 +51,11 @@ describe("工单筛选", () => {
   it("excludes deleted official IDs even when an old personal draft is still saved", () => {
     expect(mergeSchoolOrders(orders, [], ["BX-A", "BX-B"]).map(item => item.id)).toEqual(["BX-C"]);
   });
+});
+
+it("saves the current recommendation until an explicit non-emergency priority is chosen", () => {
+  const form = { ...emptyRepairDraft, location: "教学楼洗手池", description: "水管漏水，积水没有流到插座旁。" };
+  expect(createDraftOrder(form).priority).toBe("紧急");
+  expect(createDraftOrder({ ...form, priority: "普通" }).priority).toBe("普通");
+  expect(createDraftOrder({ ...form, priority: "普通", description: "水管漏水，积水已经流到插座旁。" }).priority).toBe("特急");
 });

@@ -174,6 +174,28 @@ describe("本地校园管家咨询规则", () => {
     expect(reply.text).toContain("【紧急级别】：特急");
   });
 
+  it.each([
+    ["教学楼洗手池水管漏水，积水已经流到插座旁。", "特急"],
+    ["教学楼洗手池水管漏水，积水没有流到插座旁。", "紧急"],
+    ["水管漏水，积水尚未靠近插座，也未发现插座有火花。", "紧急"],
+    ["积水没有流到插座旁，但是另一个插座正在冒烟。", "特急"],
+    ["水管漏水，地上有积水，千万不要靠近插座。", "紧急"],
+    ["洗手池松动，未发现水管漏水，帮我报修。", "普通"],
+    ["洗手池的漏水传感器屏幕坏了，请报修。", "普通"],
+    ["水管漏水，积水没有流到墙边的插座。", "紧急"],
+    ["地上积水正在靠近排插。", "特急"],
+    ["水管漏水已流到墙上的开关。", "特急"],
+  ])("报修咨询按实际积水险情生成工单级别：%s", (input, priority) => {
+    const reply = getLocalReply(input);
+    expect(reply.topic).toBe("repair");
+    expect(reply.text).toContain(`【紧急级别】：${priority}`);
+  });
+
+  it("积水预防问题保留咨询语境", () => {
+    const reply = getLocalReply("如何预防积水流到插座旁？");
+    expect(reply.text).not.toContain("【紧急级别】：特急");
+  });
+
   it("否定同时覆盖列举的多种险情", () => {
     const reply = getLocalReply("宿舍灯不亮，没有冒烟、漏电和火花");
     expect(reply.text).not.toContain("【紧急级别】：特急");

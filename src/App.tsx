@@ -44,6 +44,7 @@ import { DeploymentProvider, useDeployment } from "./lib/deployment";
 import { emptyRepairDraft, type RepairDraft } from "./lib/repair";
 import { useSchoolOrders } from "./lib/school-orders";
 import { mergeSchoolOrders } from "./lib/orders";
+import { addInspectionRepairDraft, removePersonalOrder } from "./lib/inspection-repair";
 import "./phase-one.css";
 
 const Chat = lazy(() => import("./components/Chat"));
@@ -142,6 +143,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
   const orders = mergeSchoolOrders(personalOrders, schoolOrders.orders, schoolOrders.deletedIds);
   const [deletingOrder, setDeletingOrder] = useState(false);
   const deletingOrderRef = useRef(false);
+  const creatingInspectionDraft = useRef(false);
   const accountLeaving = useRef(false);
   const accountMounted = useRef(false);
   useEffect(() => { accountMounted.current = true; return () => { accountMounted.current = false; }; }, []);
@@ -256,6 +258,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
   };
   const signOut = async () => {
     if (busyRef.current) { notify("请等本次答复完成后退出，确保咨询记录完整保存。"); return; }
+    if (creatingInspectionDraft.current) { notify("巡检报修草稿正在保存，完成后即可退出。"); return; }
     if (deletingOrderRef.current) { notify("请等工单删除完成后退出，确保记录保存到当前账号。"); return; }
     if (accountLeaving.current) return;
     accountLeaving.current = true;
@@ -448,10 +451,30 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
     }
   };
   const saveOrder = (order: WorkOrder) => {
-    setOrders((previous) => [order, ...previous].slice(0, 1000));
+    if (personalOrders.length >= 1000) { notify("个人工单已达 1000 张，请先归档并清理不再需要的记录。"); return; }
+    setOrders((previous) => [order, ...previous]);
     setRepairDraft(emptyRepairDraft);
     navigate("orders", { recordId: order.id });
     notify("报修草稿已保存，请核对后点击“提交给学校”");
+  };
+  const createInspectionDraft = async (inspectionId: string, checkId: string, fields: { location: string; description: string }) => {
+    if (creatingInspectionDraft.current || deletingOrderRef.current || accountLeaving.current) return false;
+    creatingInspectionDraft.current = true;
+    try {
+      if (!(await workspace.flush())) { notify("巡检尚未同步，请先保存当前记录。"); return false; }
+      const linkedId = (data: WorkspaceSnapshot["data"]) => data.inspections.find(row => row.id === inspectionId)?.repairLinks?.find(link => link.checkId === checkId)?.orderId;
+      const next = workspace.change(current => addInspectionRepairDraft(current, inspectionId, checkId, fields));
+      const persisted = await workspace.flush() ? next : await workspace.recoverSaved(next, data => Boolean(linkedId(data)));
+      const orderId = persisted && linkedId(persisted);
+      if (!orderId) { notify("草稿尚未同步，请查看页面上的同步提示。"); return false; }
+      const currentRoute = readRoute();
+      if (accountMounted.current && !accountLeaving.current && currentRoute.recordId === inspectionId && currentRoute.page === "safety") {
+        navigate("orders", { recordId: orderId });
+        notify(orderId === linkedId(next) ? "巡检报修草稿已保存，核对后即可提交给学校" : "另一窗口已为这个检查项生成草稿，已打开同一张工单");
+      }
+      return true;
+    } catch (e) { notify(e instanceof Error ? e.message : "生成报修草稿失败，请重试。"); return false; }
+    finally { creatingInspectionDraft.current = false; }
   };
   const actOnOrder = async (id: string, action: "submit" | "confirm" | "reopen", note?: string) => {
     if (deletingOrderRef.current || accountLeaving.current) return false;
@@ -469,17 +492,27 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
     } catch (e) { notify(e instanceof Error ? e.message : "工单操作失败，请重试。"); return false; }
   };
   const deleteOrder = async (id: string) => {
-    if (deletingOrderRef.current || accountLeaving.current || schoolOrders.busy || schoolOrders.loading || schoolOrders.error) return false;
+    if (deletingOrderRef.current || creatingInspectionDraft.current || accountLeaving.current || schoolOrders.busy || schoolOrders.loading || schoolOrders.error) return false;
     const order = orders.find(item => item.id === id);
     if (!order) return false;
     deletingOrderRef.current = true; setDeletingOrder(true);
     try {
       if (order.school) await schoolOrders.remove(order);
       if (!accountMounted.current) return false;
-      setOrders(previous => previous.filter(item => item.id !== id));
+      const source = inspections.find(row => row.repairLinks?.some(link => link.orderId === id));
+      const afterRemoval = workspace.change(current => removePersonalOrder(current, id, Boolean(order.school)));
       const synced = await workspace.flush();
       if (!synced && !order.school) {
-        setOrders(previous => previous.some(item => item.id === id) ? previous : [order, ...previous]);
+        workspace.change(current => {
+          const link = source?.repairLinks?.find(item => item.orderId === id);
+          const editedSource = source && afterRemoval.inspections.find(row => row.id === source.id);
+          const restored = link && source && editedSource ? current.inspections.map(row => {
+            if (row.id !== source.id || row.repairLinks?.some(item => item.checkId === link.checkId)) return row;
+            if (row === editedSource) return source;
+            return { ...row, repairLinks: [...(row.repairLinks ?? []), link], timeline: row.timeline.filter(event => event !== editedSource.timeline.at(-1)) };
+          }) : current.inspections;
+          return { ...current, inspections: restored, orders: current.orders.some(item => item.id === id) ? current.orders : [order, ...current.orders] };
+        });
         notify("删除尚未保存，请同步账号记录后重试。");
         return false;
       }
@@ -681,7 +714,9 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
             />
           )}
           {page === "operations" && <Operations orders={orders} inspections={inspections} navigate={navigate} openRecord={openRecord} period={operationsPeriod} onPeriodChange={setOperationsPeriod} />}
-          {page === "safety" && <Safety inspections={inspections} onChange={setInspections} notify={notify} selectedId={route.recordId ?? null} onSelect={selectRecord} view={inspectionView} onViewChange={changeInspectionView} />}
+          {page === "safety" && <Safety inspections={inspections} onChange={setInspections} notify={notify} selectedId={route.recordId ?? null} onSelect={selectRecord} view={inspectionView} onViewChange={changeInspectionView}
+            repairFlow={{ orders, deletedOrderIds: schoolOrders.deletedIds, loading: schoolOrders.loading, error: schoolOrders.error,
+              onCreateDraft: createInspectionDraft, onOpenOrder: id => navigate("orders", { recordId: id }), onRefresh: () => void schoolOrders.refresh() }} />}
           {page === "knowledge" && <Knowledge ask={(value) => void ask(value)} />}
           {page === "research" && <Research navigate={navigate} notify={notify} />}
           {page === "admin" && user.role === "admin" && <Admin onAiSettings={openAiSettings} onBackupSettings={() => { setAiSettingsTarget("backup"); setAiSettingsOpen(true); }} />}
@@ -707,6 +742,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
             <Orders
               orders={orders}
               selectedId={route.recordId ?? null}
+              sourceInspection={inspections.find(row => row.repairLinks?.some(link => link.orderId === route.recordId))}
               onSelect={selectRecord}
               view={ordersView}
               onViewChange={changeOrdersView}

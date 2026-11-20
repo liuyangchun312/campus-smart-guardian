@@ -7,7 +7,7 @@ export type SafetyTemplate = {
   name: string;
   context: string;
   icon: "cleaning" | "electrical" | "heat";
-  checks: { id: string; text: string; help: string; critical?: boolean }[];
+  checks: { id: string; text: string; repairLabel: string; help: string; critical?: boolean }[];
 };
 export type Remediation = { owner: string; dueDate: string; action: string; control: ControlLevel; completionEvidence?: string };
 export type SafetyReview = { reviewer: string; evidence: string; residualRatings: ResidualRiskRatings; criticalResolved: boolean; at: string };
@@ -25,27 +25,28 @@ export type Inspection = {
   updatedAt: string;
   remediation?: Remediation;
   review?: SafetyReview;
+  repairLinks?: { checkId: string; orderId: string }[];
   timeline: { at: string; status: InspectionStatus; note: string }[];
 };
 
 export const SAFETY_TEMPLATES: SafetyTemplate[] = [
   { id: "cleaning", name: "保洁与化学品", context: "楼宇保洁 · 清洁剂使用 · 湿滑区域", icon: "cleaning", checks: [
-    { id: "chemical", text: "清洁剂有标签，按说明使用且未混用", help: "特别核查含氯清洁剂与酸性产品、氨类产品分开使用。", critical: true },
-    { id: "isolation", text: "湿滑地面已隔离并设置可见提示", help: "先隔离作业区，再清洁；恢复通行前确认地面干燥。" },
-    { id: "storage", text: "药剂妥善封存，现场具备通风条件", help: "原包装存放，不使用饮料瓶分装；避免密闭空间积聚。" },
-    { id: "protection", text: "按产品要求配备并正确使用防护用品", help: "核对手套、护目镜等是否适用；个人防护不能代替通风和隔离。" },
+    { id: "chemical", repairLabel: "清洁剂标识与使用", text: "清洁剂有标签，按说明使用且未混用", help: "特别核查含氯清洁剂与酸性产品、氨类产品分开使用。", critical: true },
+    { id: "isolation", repairLabel: "湿滑区域隔离与提示", text: "湿滑地面已隔离并设置可见提示", help: "先隔离作业区，再清洁；恢复通行前确认地面干燥。" },
+    { id: "storage", repairLabel: "药剂存放与通风", text: "药剂妥善封存，现场具备通风条件", help: "原包装存放，不使用饮料瓶分装；避免密闭空间积聚。" },
+    { id: "protection", repairLabel: "作业防护用品", text: "按产品要求配备并正确使用防护用品", help: "核对手套、护目镜等是否适用；个人防护不能代替通风和隔离。" },
   ] },
   { id: "electrical", name: "用电与设备", context: "配电区域 · 插座电缆 · 设备维护", icon: "electrical", checks: [
-    { id: "live", text: "无裸露带电部位、异常火花或焦糊气味", help: "发现异常立即远离并隔离，由具备资格的人员处置。", critical: true },
-    { id: "maintenance", text: "维护作业已停机断电并防止意外启动", help: "断电与能源隔离由有资质人员按现场规程确认。", critical: true },
-    { id: "cable", text: "电缆插座完好，无积水和过载迹象", help: "查看外观与环境，不触碰疑似带电或破损部位。" },
-    { id: "access", text: "配电通道畅通，设备使用人员已受培训", help: "确保紧急断电位置可达，非专业人员不进行维修。" },
+    { id: "live", repairLabel: "设备带电部位与异常现象", text: "无裸露带电部位、异常火花或焦糊气味", help: "发现异常立即远离并隔离，由具备资格的人员处置。", critical: true },
+    { id: "maintenance", repairLabel: "设备停机与能源隔离", text: "维护作业已停机断电并防止意外启动", help: "断电与能源隔离由有资质人员按现场规程确认。", critical: true },
+    { id: "cable", repairLabel: "电缆与插座状况", text: "电缆插座完好，无积水和过载迹象", help: "查看外观与环境，不触碰疑似带电或破损部位。" },
+    { id: "access", repairLabel: "配电通道与操作条件", text: "配电通道畅通，设备使用人员已受培训", help: "确保紧急断电位置可达，非专业人员不进行维修。" },
   ] },
   { id: "heat", name: "高温与户外作业", context: "校园绿化 · 搬运 · 户外保洁", icon: "heat", checks: [
-    { id: "symptoms", text: "人员无意识异常、晕厥等疑似严重热病表现", help: "出现严重症状应停止作业、转移到阴凉处并及时呼叫急救。", critical: true },
-    { id: "rest", text: "已安排饮水、阴凉休息点和工作休息轮换", help: "结合现场温度、湿度、负荷和个体情况安排，不用固定温度代替评估。" },
-    { id: "acclimatization", text: "新上岗或返岗人员有逐步适应安排", help: "循序增加热暴露，安排同伴观察和异常报告。" },
-    { id: "schedule", text: "已评估错峰、遮阳及机械辅助的可行性", help: "优先减少暴露和劳动强度，再辅以培训与个人防护。" },
+    { id: "symptoms", repairLabel: "户外作业人员状态", text: "人员无意识异常、晕厥等疑似严重热病表现", help: "出现严重症状应停止作业、转移到阴凉处并及时呼叫急救。", critical: true },
+    { id: "rest", repairLabel: "饮水与休息设施", text: "已安排饮水、阴凉休息点和工作休息轮换", help: "结合现场温度、湿度、负荷和个体情况安排，不用固定温度代替评估。" },
+    { id: "acclimatization", repairLabel: "新上岗人员适应安排", text: "新上岗或返岗人员有逐步适应安排", help: "循序增加热暴露，安排同伴观察和异常报告。" },
+    { id: "schedule", repairLabel: "户外作业安排与遮阳设施", text: "已评估错峰、遮阳及机械辅助的可行性", help: "优先减少暴露和劳动强度，再辅以培训与个人防护。" },
   ] },
 ];
 
@@ -110,6 +111,7 @@ export function isOverdue(inspection: Inspection, now: Date = new Date()): boole
 export function isInspections(value: unknown): value is Inspection[] {
   if (!Array.isArray(value) || value.length > 5000) return false;
   const ids = new Set<string>();
+  const linkedOrders = new Set<string>();
   return value.every((item: unknown) => {
     if (!item || typeof item !== "object") return false;
     const row = item as Inspection;
@@ -117,6 +119,16 @@ export function isInspections(value: unknown): value is Inspection[] {
     if (!nonempty(row.id) || ids.has(row.id) || !template || !nonempty(row.site) || !nonempty(row.inspector) || typeof row.notes !== "string" || !isRiskRatings(row.ratings) || !Object.hasOwn(STATUS_LABELS, row.status) || !validDate(row.createdAt) || !validDate(row.updatedAt) || !row.answers || typeof row.answers !== "object") return false;
     ids.add(row.id);
     if (!template.checks.every(({ id }) => row.answers[id] === "passed" || row.answers[id] === "failed")) return false;
+    if (row.repairLinks !== undefined) {
+      if (!Array.isArray(row.repairLinks) || row.repairLinks.length > template.checks.length) return false;
+      const checks = new Set<string>();
+      for (const link of row.repairLinks) {
+        if (!link || !template.checks.some(({ id }) => id === link.checkId) || row.answers[link.checkId] !== "failed") return false;
+        if (!nonempty(link.orderId) || link.orderId.length > 100 || linkedOrders.has(link.orderId) || checks.has(link.checkId)) return false;
+        linkedOrders.add(link.orderId);
+        checks.add(link.checkId);
+      }
+    }
     if (row.remediation !== undefined && !isRemediation(row.remediation)) return false;
     if (row.review !== undefined && !isReview(row.review)) return false;
     if ((row.status === "registered" || row.status === "remediating") && row.review !== undefined) return false;
@@ -187,6 +199,10 @@ export function inspectionMarkdown(inspection: Inspection): string {
   const template = SAFETY_TEMPLATES.find(({ id }) => id === inspection.templateId)!;
   const risk = getRisk(inspection.ratings, hasCriticalFailure(inspection));
   const sections = [`# 巡检与整改记录`, `编号：${inspection.id}\n地点：${inspection.site}\n场景：${template.name}\n检查人：${inspection.inspector}\n状态：${STATUS_LABELS[inspection.status]}\n登记时间：${inspection.createdAt}`, `## 检查结果\n${template.checks.map(({ id, text }) => `- ${inspection.answers[id] === "passed" ? "符合" : "不符合"}：${text}`).join("\n")}\n现场备注：${inspection.notes || "无"}`, `## 初始风险\nS=${inspection.ratings.severity} / O=${inspection.ratings.occurrence} / D=${inspection.ratings.detection}\nRPN=${risk.score}；${risk.label}；${risk.reason}`];
+  if (inspection.repairLinks?.length) {
+    const links = inspection.repairLinks.map(({ checkId, orderId }) => `- ${template.checks.find(({ id }) => id === checkId)!.repairLabel} · ${orderId}`);
+    sections.push(`## 关联报修\n${links.join("\n")}`);
+  }
   if (inspection.remediation) sections.push(`## 整改\n责任人：${inspection.remediation.owner}\n期限：${inspection.remediation.dueDate}\n控制层级：${CONTROL_LEVELS.find(({ value }) => value === inspection.remediation!.control)?.label}\n措施：${inspection.remediation.action}\n完成说明：${inspection.remediation.completionEvidence || "尚未提交"}`);
   if (inspection.review) {
     const { reviewer, evidence, residualRatings, criticalResolved } = inspection.review;

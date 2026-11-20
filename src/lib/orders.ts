@@ -1,4 +1,22 @@
 import type { OrderStatus, WorkOrder } from "../types";
+import { classifyRepair, type RepairDraft } from "./repair";
+
+export function effectiveRepairPriority(assessed: WorkOrder["priority"], selected?: WorkOrder["priority"]) {
+  return assessed === "特急" ? assessed : selected ?? assessed;
+}
+
+export function createDraftOrder(draft: Omit<RepairDraft, "category"> & { category?: string }): WorkOrder {
+  const at = new Date();
+  const stamp = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(at).replaceAll("-", "");
+  const assessment = classifyRepair(draft.description);
+  const createdAt = at.toISOString();
+  return {
+    id: `BX-${stamp}-${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`,
+    category: draft.category ?? assessment.category, location: draft.location.trim(), description: draft.description.trim(),
+    priority: effectiveRepairPriority(assessment.priority, draft.priority), safety: assessment.safety,
+    status: "draft", createdAt, history: [{ status: "draft", at: createdAt }],
+  };
+}
 
 export const statusLabels: Record<OrderStatus, string> = {
   draft: "待提交学校", submitted: "待学校受理", accepted: "学校已受理", processing: "处理中",

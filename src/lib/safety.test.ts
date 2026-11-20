@@ -10,6 +10,10 @@ function fixture(overrides: Partial<Inspection> = {}): Inspection {
 }
 const toReview = (row = fixture()) => transitionInspection(transitionInspection(row, { type: "plan", plan }, now), { type: "submit-review", evidence: "已更换药剂，标签和通风现场照片编号 002" }, now);
 
+it("rejects a repair linked to a checklist item that passed inspection", () => {
+  expect(isInspections([{ ...fixture(), repairLinks: [{ checkId: "chemical", orderId: "BX-TEST" }] }])).toBe(false);
+});
+
 describe("简化 FMEA 风险排序", () => {
   it("uses product thresholds while retaining the three independent dimensions", () => {
     expect(getRisk({ severity: 2, occurrence: 3, detection: 3 })).toMatchObject({ score: 18, level: "low" });

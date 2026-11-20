@@ -21,6 +21,8 @@ import { formatDate } from "../lib/storage";
 import { filterOrders, statusLabels, orderStatusLabel } from "../lib/orders";
 import OrderHistory from "./OrderHistory";
 import type { OrdersViewState } from "../lib/navigation";
+import { workspaceHash } from "../lib/navigation";
+import type { Inspection } from "../lib/safety";
 import { useDeployment } from "../lib/deployment";
 import type { WorkOrder } from "../types";
 import "./orders.css";
@@ -43,6 +45,7 @@ export default function Orders({
   error,
   loading,
   onRefresh,
+  sourceInspection,
 }: {
   orders: WorkOrder[];
   onAction: (id: string, action: "submit" | "confirm" | "reopen", note?: string) => Promise<boolean>;
@@ -57,6 +60,7 @@ export default function Orders({
   error: string;
   loading: boolean;
   onRefresh: () => void;
+  sourceInspection?: Pick<Inspection, "id" | "site">;
 }) {
   const { label, storageLabel, description } = useDeployment();
   const selected = orders.find((order) => order.id === selectedId);
@@ -267,6 +271,13 @@ export default function Orders({
               {orderStatusLabel(selected)}
             </span>
           </div>
+          {sourceInspection && (
+            <a className="order-inspection-source" href={workspaceHash({ page: "safety", recordId: sourceInspection.id })}>
+              <ShieldCheck size={20} />
+              <span><small>来源巡检</small><strong>{sourceInspection.site}</strong></span>
+              <span>返回巡检 <ArrowRight size={15} /></span>
+            </a>
+          )}
           <dl className="order-details">
             <dt>工单类型</dt>
             <dd>{selected.category}</dd>
