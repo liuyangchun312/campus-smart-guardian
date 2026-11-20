@@ -87,8 +87,10 @@ p {
   time, .numeric, .ops-bar-label > span:last-child, .ops-metric-number,
   .orders-results, .filter-tabs > button > span, .safety-records-header h2 span,
   .safety-stat > strong, .safety-check-index, .safety-rpn > strong,
-  .admin-metrics strong, .ai-service-metrics strong, .school-queue-counts strong
+  .admin-metrics strong, .ai-service-metrics strong, .school-queue-counts strong,
+  .research-intro > span, .research-index
 ) {
+  font-variant-numeric:tabular-nums;
   letter-spacing:-.03em;
 }
 svg {

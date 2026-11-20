@@ -14,7 +14,7 @@
 :root { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 .theme-control { gap: 6px; flex-shrink: 0; transition: background 180ms ease; }
-.theme-control:hover, .app-shell .type-toggle:hover { background: var(--capsule-fill); color: var(--ink); }
+.theme-control:hover, .app-shell .topbar .type-toggle:hover { background: var(--capsule-fill); color: var(--ink); }
 .theme-control:focus-within { outline: 2px solid var(--forest); outline-offset: 2px; }
 .theme-control select {
   width: auto;

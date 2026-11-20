@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, ArrowUpRight, BookOpen, Calculator, CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, FileSearch, FlaskConical, MessageCircle, Plus, ShieldCheck, TriangleAlert, Wrench } from "lucide-react";
+import { ArrowRight, ArrowUpRight, BookOpen, Calculator, CalendarClock, CalendarDays, ClipboardCheck, ClipboardList, FileSearch, FlaskConical, History, LayoutDashboard, MessageCircle, Plus, ShieldCheck, TriangleAlert, Wrench } from "lucide-react";
 import type { Page, WorkOrder } from "../types";
 import type { Inspection } from "../lib/safety";
 import { localDateKey, pendingTasks, summarizeOperations } from "../lib/operations";
@@ -100,8 +100,12 @@ export default function Home({ name, navigate, openRecord, ask, openTool, orders
             </div>
           ) : (
             <div className="wb-empty">
+              <span className="wb-empty-icon" aria-hidden="true"><ClipboardCheck size={23} strokeWidth={1.65} /></span>
               <p>{activities.length ? "当前没有待跟进事项" : "暂无待办记录"}</p>
-              <button className="text-button" onClick={() => navigate("operations")}>查看运行看板<ArrowRight size={14} aria-hidden="true" /></button>
+              <div className="wb-empty-actions">
+                <button type="button" onClick={() => navigate("operations")}><LayoutDashboard size={15} aria-hidden="true" />快速待办</button>
+                <button type="button" onClick={() => navigate("repair")}><Plus size={15} aria-hidden="true" />新建报修</button>
+              </div>
             </div>
           )}
         </section>
@@ -123,8 +127,12 @@ export default function Home({ name, navigate, openRecord, ask, openTool, orders
             </div>
           ) : (
             <div className="wb-empty">
+              <span className="wb-empty-icon" aria-hidden="true"><History size={23} strokeWidth={1.65} /></span>
               <p>暂无报修或巡检记录</p>
-              <button className="text-button" onClick={() => navigate("safety", { filter: "all" })}>查看安全巡检<ArrowRight size={14} aria-hidden="true" /></button>
+              <div className="wb-empty-actions">
+                <button type="button" onClick={() => navigate("orders", { filter: "all" })}><ClipboardList size={15} aria-hidden="true" />全部工单</button>
+                <button type="button" onClick={() => navigate("safety", { filter: "all" })}><ShieldCheck size={15} aria-hidden="true" />全部巡检</button>
+              </div>
             </div>
           )}
         </section>

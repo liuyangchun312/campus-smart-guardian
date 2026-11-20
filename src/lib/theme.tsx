@@ -14,7 +14,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       const resolved = theme === "system" ? media.matches ? "dark" : "light" : theme;
       document.documentElement.dataset.theme = resolved;
       document.documentElement.style.colorScheme = resolved;
-      document.querySelector('meta[name="theme-color"]')?.setAttribute("content", resolved === "dark" ? "#211915" : "#FAF8F5");
+      document.querySelector('meta[name="theme-color"]')?.setAttribute("content", resolved === "dark" ? "#10201E" : "#F2FBF9");
     };
     apply(); media.addEventListener("change", apply);
     try { localStorage.setItem("guardian:theme:v1", theme); } catch { /* Theme still works for this visit. */ }

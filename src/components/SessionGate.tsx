@@ -77,8 +77,8 @@ function AuthScreen({ setupRequired, onAuthenticated }: { setupRequired: boolean
     </header>
     <section className="auth-story" aria-labelledby="auth-service-title">
       <div className="auth-story-copy">
-        <h1 id="auth-service-title"><span>校园服务</span><span>工作台</span></h1>
-        <p>在一处办理后勤报修与安全巡检，查阅劳动权益资料。</p>
+        <h1 id="auth-service-title">校园服务<wbr />工作台</h1>
+        <p>集中办理后勤报修和安全巡检，随时查阅劳动权益指引。</p>
       </div>
       <div className="auth-campus">
         <img src="/campus-scene.svg" alt="" width="600" height="360" />
@@ -95,7 +95,7 @@ function AuthScreen({ setupRequired, onAuthenticated }: { setupRequired: boolean
     <section className="auth-form-wrap" aria-labelledby="auth-form-title">
       <h2 id="auth-form-title">{mode === "bootstrap" ? "初始化管理员" : mode === "register" ? "创建您的账号" : portal === "admin" ? "管理员登录" : "登录校园智护"}</h2>
       <p>{mode === "bootstrap" ? "使用部署初始化码创建首位管理员。" : mode === "register" ? "注册后即可保存您的咨询、报修与巡检记录。" : portal === "admin" ? "受理校方工单，管理用户与 AI 服务配置。" : "进入个人工作台，查看工单和巡检进度。"}</p>
-      <div className="auth-portal" role="group" aria-label="登录身份">
+      <div className="auth-portal" data-portal={portal} role="group" aria-label="登录身份">
         <button type="button" disabled={busy} aria-pressed={portal === "user"} onClick={() => { setPortal("user"); changeMode("login"); }}><UserRound size={17} aria-hidden="true" />用户入口</button>
         <button type="button" disabled={busy} aria-pressed={portal === "admin"} onClick={() => { setPortal("admin"); changeMode("login"); }}><ShieldCheck size={17} aria-hidden="true" />管理员入口</button>
       </div>
