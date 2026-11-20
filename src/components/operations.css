@@ -20,7 +20,7 @@
 .ops-metric-title { display:flex; justify-content:space-between; gap:8px; font-size:12px; align-items:center; }
 .ops-metric-title svg { color:var(--forest); }
 .ops-metric-number { display:flex; align-items:baseline; gap:6px; margin:18px 0 8px; }
-.ops-metric-number strong { font-family:var(--number-face); font-size:41px; line-height:1; font-weight:650; font-variant-numeric:tabular-nums; letter-spacing:-.035em; }
+.ops-metric-number strong { font-family:var(--number-face); font-size:41px; line-height:1; font-weight:700; letter-spacing:-.03em; }
 .ops-metric-number span { font-size:12px; color:var(--ops-muted); }
 .ops-metric > p { color:var(--ops-muted); font-size:11px; line-height:1.7; }
 .ops-metric.is-alert .ops-metric-number { color:var(--risk-high); }
@@ -68,7 +68,7 @@
 .ops-queue-item > button { display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--forest); white-space:nowrap; padding:8px 0 8px 10px; }
 .ops-queue-tail { padding:12px 0 6px; font-size:11px; color:var(--ops-muted); }
 .ops-empty { display:grid; grid-template-columns:1.1fr 1fr; gap:35px; padding:29px; margin-bottom:23px; }
-.ops-empty h2 { font-family:var(--display-face); font-size:21px; line-height:1.7; font-weight:650; }
+.ops-empty h2 { font-family:var(--display-face); font-size:21px; line-height:1.7; font-weight:600; }
 .ops-empty p { font-size:12px; line-height:1.9; color:var(--ops-muted); margin-top:10px; max-width:450px; }
 .ops-empty-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
 .ops-empty ol { margin:0; padding:0; list-style:none; display:flex; flex-direction:column; justify-content:center; gap:15px; }

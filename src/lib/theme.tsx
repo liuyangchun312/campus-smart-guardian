@@ -25,5 +25,5 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 export function ThemeControl() {
   const { theme, setTheme } = useContext(Context);
   const Icon = theme === "system" ? Monitor : theme === "dark" ? Moon : Sun;
-  return <label className="theme-control"><Icon size={16} /><select aria-label="外观主题" value={theme} onChange={(event) => setTheme(event.target.value as Theme)}><option value="light">浅色</option><option value="dark">深色</option><option value="system">跟随系统</option></select></label>;
+  return <label className="theme-control"><Icon size={16} aria-hidden="true" /><select aria-label="外观主题" value={theme} onChange={(event) => setTheme(event.target.value as Theme)}><option value="light">浅色</option><option value="dark">深色</option><option value="system">跟随系统</option></select></label>;
 }

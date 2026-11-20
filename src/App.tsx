@@ -9,7 +9,6 @@ import {
   ChevronRight,
   CircleHelp,
   ClipboardList,
-  Heart,
   HeartHandshake,
   LayoutDashboard,
   Menu,
@@ -522,6 +521,13 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
     finally { deletingOrderRef.current = false; setDeletingOrder(false); }
   };
 
+  const aiEnabled = mode === "ai";
+  const aiIndicator = aiEnabled ? (
+    <><span className="status-dot animate-pulse" aria-hidden="true" /><span>AI 已启用</span></>
+  ) : (
+    <><PlugZap size={15} aria-hidden="true" /><span>连接 AI</span></>
+  );
+
   return (
     <div className="app-shell">
       <a
@@ -548,13 +554,11 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
           aria-label="校园智护，返回首页"
         >
           <span className="brand-mark">
-            <Sprout size={29} strokeWidth={1.8} />
+            <Sprout size={24} strokeWidth={1.75} aria-hidden="true" />
           </span>
           <span>
-            <strong>
-              校园智护<span>GUARDIAN</span>
-            </strong>
-            <small>让每一份劳动都被守护</small>
+            <strong>校园智护</strong>
+            <small>校园服务工作台</small>
           </span>
         </button>
         <button
@@ -564,10 +568,9 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
         >
           <X size={20} />
         </button>
-        <div className="workspace-label">
-          <span className="campus-dot" />
-          <span>校园服务工作台</span>
-          <span className="workspace-pill" title={deployment.description}>{deployment.label}</span>
+        <div className="workspace-label" title={deployment.description}>
+          <span className="status-dot" aria-hidden="true" />
+          <span>{deployment.label}</span>
         </div>
         <nav aria-label="主导航">
           {navGroups.filter((group) => group.label !== "管理" || user.role === "admin").map((group) => <div className="nav-group" key={group.label}>
@@ -581,10 +584,8 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
             >
               <item.icon size={19} strokeWidth={1.7} />
               <span>{item.label}</span>
-              {item.id === "chat" ? (
-                <span className="ai-tag">AI</span>
-              ) : item.id === "orders" && draftCount > 0 ? (
-                <span className="nav-count">{draftCount}</span>
+              {item.id === "orders" && draftCount > 0 ? (
+                <span className="nav-count numeric">{draftCount}</span>
               ) : page === item.id ? (
                 <span className="nav-active-dot" />
               ) : null}
@@ -621,21 +622,6 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
           </details>
         </div>
         <div className="sidebar-bottom">
-          <div className="sidebar-care">
-            <span className="care-overline">
-              <Heart size={14} />
-              劳动不平凡
-            </span>
-            <strong>
-              守护每一个
-              <br />
-              认真生活的你。
-            </strong>
-            <div>
-              <span>您的付出，值得被看见</span>
-              <Sprout size={33} strokeWidth={1.2} />
-            </div>
-          </div>
           <button className="visitor" onClick={() => { setMenuOpen(false); setAccountOpen(true); }}>
             <span className="visitor-avatar">{user.name.slice(0, 1)}</span>
             <span>
@@ -663,14 +649,17 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
           </div>
           <div className="topbar-actions">
             <ThemeControl />
-            {user.role === "admin" && <button
-              className={`ai-connect-button ${mode === "ai" ? "connected" : ""}`}
-              onClick={openAiSettings}
-              aria-label="打开 AI 连接设置"
-            >
-              <PlugZap size={15} />
-              {mode === "ai" ? "AI 已启用" : "连接 AI"}
-            </button>}
+            {user.role === "admin" ? (
+              <button
+                className={`ai-connect-button ${aiEnabled ? "connected" : ""}`}
+                onClick={openAiSettings}
+                aria-label={aiEnabled ? "AI 已启用，打开 AI 连接设置" : "打开 AI 连接设置"}
+              >
+                {aiIndicator}
+              </button>
+            ) : aiEnabled && (
+              <span className="ai-connect-button connected">{aiIndicator}</span>
+            )}
             <span className="header-separator" />
             <button
               className={`type-toggle ${largeType ? "on" : ""}`}
@@ -705,6 +694,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
           <Suspense fallback={<div className="page-loading" role="status">正在载入工作区…</div>}>
           {page === "home" && (
             <Home
+              name={user.name}
               navigate={navigate}
               ask={(value) => void ask(value)}
               openTool={setTool}

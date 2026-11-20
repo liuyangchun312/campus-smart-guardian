@@ -8,6 +8,7 @@ import { formatDate } from "../lib/storage";
 import "./workbench.css";
 
 type Props = {
+  name: string;
   navigate: (page: Page, options?: { recordId?: string; filter?: string }) => void;
   openRecord: (type: "order" | "inspection", id: string) => void;
   ask: (text: string) => void;
@@ -22,7 +23,7 @@ const dateHeading = new Intl.DateTimeFormat("zh-CN", {
 });
 const weekdayHeading = new Intl.DateTimeFormat("zh-CN", { weekday: "long" });
 
-export default function Home({ navigate, openRecord, ask, openTool, orders, inspections }: Props) {
+export default function Home({ name, navigate, openRecord, ask, openTool, orders, inspections }: Props) {
   const { storageLabel, description } = useDeployment();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -48,9 +49,16 @@ export default function Home({ navigate, openRecord, ask, openTool, orders, insp
     <div className="workbench-home page-enter">
       <header className="wb-heading">
         <div className="wb-hero-copy">
-          <time className="wb-date" dateTime={localDateKey(now)}><CalendarDays size={15} /><span>{dateHeading.format(now)} {weekdayHeading.format(now)}</span></time>
+          <time className="wb-date" dateTime={localDateKey(now)}>
+            <CalendarDays size={15} aria-hidden="true" />
+            <span>{dateHeading.format(now)}</span>
+            <span>{weekdayHeading.format(now)}</span>
+          </time>
           <h1>工作总览</h1>
-          <p className="wb-storage" title={description}><ShieldCheck size={15} /><span>记录保存于{storageLabel}</span></p>
+          <div className="wb-context">
+            <p className="wb-welcome">您好，{name}</p>
+            <p className="wb-storage" title={description}><ShieldCheck size={15} aria-hidden="true" /><span>记录保存于{storageLabel}</span></p>
+          </div>
           <div className="wb-main-actions">
             <button className="button primary" onClick={() => navigate("repair")}><Plus size={17} />新建报修</button>
             <button className="button outline" onClick={() => navigate("safety")}><ShieldCheck size={17} />开始安全巡检</button>
@@ -62,10 +70,10 @@ export default function Home({ navigate, openRecord, ask, openTool, orders, insp
       <section className="wb-metrics" aria-label="当前待办统计">
         {metrics.map(({ label: title, value, icon: Icon, page, filter, tone }) => (
           <button className={`wb-metric tone-${tone}`} key={title} onClick={() => navigate(page, { filter })} aria-label={`${title} ${value} 条，查看记录`}>
-            <span className="wb-metric-icon"><Icon size={19} /></span>
+            <span className="wb-metric-icon" aria-hidden="true"><Icon size={19} /></span>
+            <span className="wb-metric-status" aria-hidden="true"><i /><ArrowUpRight size={13} /></span>
             <span className="wb-metric-label">{title}</span>
-            <span className="wb-metric-value"><strong>{value}</strong><small>条</small></span>
-            <ArrowUpRight className="wb-metric-arrow" size={15} />
+            <span className="wb-metric-value"><strong className="numeric">{value}</strong><small>条</small></span>
           </button>
         ))}
       </section>
@@ -73,8 +81,8 @@ export default function Home({ navigate, openRecord, ask, openTool, orders, insp
       <div className="wb-ledgers">
         <section className="wb-ledger-panel" aria-labelledby="wb-queue-title">
           <header className="wb-section-heading">
-            <h2 id="wb-queue-title">优先处理 <small>{tasks.length} 条待办</small></h2>
-            <button className="text-button" onClick={() => navigate("operations")}>运行看板<ArrowRight size={14} /></button>
+            <h2 id="wb-queue-title">优先处理{tasks.length > 0 && <small><span className="numeric">{tasks.length}</span> 条待办</small>}</h2>
+            {tasks.length > 0 && <button className="text-button" onClick={() => navigate("operations")}>运行看板<ArrowRight size={14} /></button>}
           </header>
           {tasks.length ? (
             <div className="wb-task-list">
@@ -83,7 +91,7 @@ export default function Home({ navigate, openRecord, ask, openTool, orders, insp
                   <span className={`wb-record-icon ${task.alert ? "is-alert" : ""}`}>{task.type === "order" ? <Wrench size={17} /> : <ShieldCheck size={17} />}</span>
                   <span className="wb-row-copy">
                     <strong>{task.title}</strong>
-                    <small>{task.location} · {task.type === "order" ? "报修" : "巡检"} · {formatDate(task.createdAt)}</small>
+                    <small>{task.location} · {task.type === "order" ? "报修" : "巡检"} · <time dateTime={task.createdAt}>{formatDate(task.createdAt)}</time></small>
                   </span>
                   <span className={`wb-task-label ${task.alert ? "is-alert" : ""}`}>{task.label}</span>
                   <ArrowRight className="wb-row-arrow" size={15} />
@@ -91,18 +99,25 @@ export default function Home({ navigate, openRecord, ask, openTool, orders, insp
               ))}
             </div>
           ) : (
-            <div className="wb-empty"><ClipboardCheck size={26} strokeWidth={1.6} /><p>{activities.length ? "当前没有待跟进事项" : "暂无待办记录"}</p></div>
+            <div className="wb-empty">
+              <ClipboardCheck size={23} strokeWidth={1.6} aria-hidden="true" />
+              <p>{activities.length ? "当前没有待跟进事项" : "暂无待办记录"}</p>
+              <div className="wb-empty-actions">
+                <button onClick={() => navigate("operations")}><ArrowUpRight size={14} aria-hidden="true" />快速待办</button>
+                <button onClick={() => navigate("orders")}><ClipboardList size={14} aria-hidden="true" />我的工单</button>
+              </div>
+            </div>
           )}
-          {tasks.length > 6 && <button className="text-button wb-more" onClick={() => navigate("operations")}>查看全部 {tasks.length} 条待办<ArrowRight size={14} /></button>}
+          {tasks.length > 6 && <button className="text-button wb-more" onClick={() => navigate("operations")}><span>查看全部 <span className="numeric">{tasks.length}</span> 条待办</span><ArrowRight size={14} /></button>}
         </section>
 
         <section className="wb-ledger-panel" aria-labelledby="wb-recent-title">
           <header className="wb-section-heading">
             <h2 id="wb-recent-title">最近记录</h2>
-            <div className="wb-record-links">
-              <button className="text-button" onClick={() => navigate("orders")}>全部工单<ArrowUpRight size={13} /></button>
-              <button className="text-button" onClick={() => navigate("safety")}>全部巡检<ArrowUpRight size={13} /></button>
-            </div>
+            {activities.length > 0 && <div className="wb-record-links">
+              <button className="text-button" onClick={() => navigate("orders", { filter: "all" })}>全部工单<ArrowUpRight size={13} /></button>
+              <button className="text-button" onClick={() => navigate("safety", { filter: "all" })}>全部巡检<ArrowUpRight size={13} /></button>
+            </div>}
           </header>
           {activities.length ? (
             <div className="wb-activity-list">
@@ -115,7 +130,14 @@ export default function Home({ navigate, openRecord, ask, openTool, orders, insp
               ))}
             </div>
           ) : (
-            <div className="wb-empty"><Clock3 size={26} strokeWidth={1.6} /><p>暂无报修或巡检记录</p><button className="text-button" onClick={() => navigate("repair")}>新建报修<ArrowRight size={14} /></button></div>
+            <div className="wb-empty">
+              <Clock3 size={23} strokeWidth={1.6} aria-hidden="true" />
+              <p>暂无报修或巡检记录</p>
+              <div className="wb-empty-actions">
+                <button onClick={() => navigate("repair")}><Plus size={14} aria-hidden="true" />新建报修</button>
+                <button onClick={() => navigate("safety", { filter: "all" })}><ShieldCheck size={14} aria-hidden="true" />全部巡检</button>
+              </div>
+            </div>
           )}
         </section>
       </div>

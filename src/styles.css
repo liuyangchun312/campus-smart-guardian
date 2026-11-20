@@ -1,5 +1,8 @@
 :root {
-  font-family:"Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
+  --ui-face: "Plus Jakarta Sans", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family:var(--ui-face);
+  font-weight:400;
+  font-variant-numeric:tabular-nums;
   color:light-dark(#293c33,#dbe9de);
   background:light-dark(#f6f7f4,#1e2e24);
   font-synthesis:none;
@@ -82,6 +85,18 @@ h3,
 h4,
 p {
   margin:0;
+}
+:where(h1, h2, h3, h4, h5, h6) {
+  font-weight:600;
+  letter-spacing:-.02em;
+}
+:where(
+  time, .numeric, .ops-bar-label > span:last-child, .ops-metric-number,
+  .orders-results, .filter-tabs > button > span, .safety-records-header h2 span,
+  .safety-stat > strong, .safety-check-index, .safety-rpn > strong,
+  .admin-metrics strong, .ai-service-metrics strong, .school-queue-counts strong
+) {
+  letter-spacing:-.03em;
 }
 svg {
   flex-shrink:0;
@@ -180,20 +195,6 @@ input::-webkit-inner-spin-button {
   font-size:11px;
   color:light-dark(#7b867b,#b9cebc);
 }
-.campus-dot {
-  width:5px;
-  height:5px;
-  border-radius:50%;
-  background:#879c77;
-}
-.workspace-pill {
-  margin-left:auto;
-  border:1px solid light-dark(#dce3d5,#344a3a);
-  border-radius:4px;
-  font-size:9px;
-  padding:1px 4px;
-  color:light-dark(#758769,#b9cebc);
-}
 .nav-caption {
   font-size:10px;
   letter-spacing:1px;
@@ -241,17 +242,9 @@ input::-webkit-inner-spin-button {
   border-radius:50%;
   margin-right:3px;
 }
-.ai-tag {
-  font-size:9px;
-  color:light-dark(#84947a,#b9cebc);
-  border:1px solid light-dark(#d9e1d1,#344a3a);
-  padding:0 4px;
-  line-height:15px;
-  border-radius:4px;
-}
 .nav-count {
   background:#577350;
-  color:white !important;
+  color:white;
   padding:1px 5px;
   border-radius:5px;
   font-size:10px;
@@ -264,47 +257,6 @@ input::-webkit-inner-spin-button {
 .sidebar-bottom {
   margin-top:auto;
   padding-top:40px;
-}
-.sidebar-care {
-  margin:0 4px 22px;
-  background:light-dark(#f0f2e9,#1b2b22);
-  border:1px solid light-dark(#e5e9da,#344a3a);
-  border-radius:11px;
-  padding:17px 16px 10px;
-  overflow:hidden;
-  position:relative;
-}
-.care-overline {
-  display:flex;
-  gap:6px;
-  color:light-dark(#7c8e67,#b9cebc);
-  font-size:10px;
-  letter-spacing:1px;
-}
-.sidebar-care > strong {
-  font-family:"Noto Serif SC", "SimSun", serif;
-  font-size:18px;
-  font-weight:600;
-  line-height:1.65;
-  display:block;
-  margin:12px 0 5px;
-  color:light-dark(#546844,#dbe9de);
-}
-.sidebar-care > div {
-  display:flex;
-  align-items:end;
-  gap:5px;
-  justify-content:space-between;
-  color:light-dark(#8f9c7f,#b9cebc);
-  font-size:9px;
-  white-space:nowrap;
-}
-.sidebar-care > div > span {
-  padding-bottom:8px;
-}
-.sidebar-care > div > svg {
-  color:light-dark(#a1af8b,#a9bbaa);
-  transform:rotate(-10deg);
 }
 .visitor {
   display:flex;
@@ -516,10 +468,9 @@ input::-webkit-inner-spin-button {
   line-height:12px;
 }
 .hero h2 {
-  font-family:"Noto Serif SC", "SimSun", serif;
   font-size:37px;
   line-height:1.48;
-  letter-spacing:2px;
+  letter-spacing:-.02em;
   font-weight:600;
   color:light-dark(#2c4e3a,#dbe9de);
 }
@@ -1043,7 +994,6 @@ input::placeholder {
   align-self:center;
 }
 .care-card h3 {
-  font-family:"Noto Serif SC", "SimSun", serif;
   font-size:14px;
   font-weight:600;
   color:light-dark(#667946,#b9cebc);
@@ -1721,9 +1671,8 @@ select {
   background:light-dark(#e1e9d4,#2b3d2d);
 }
 .repair-guide h3 {
-  font-family:"Noto Serif SC", "SimSun", serif;
   font-size:19px;
-  font-weight:500;
+  font-weight:600;
   line-height:1.8;
   margin-top:19px;
   color:light-dark(#607649,#b9cebc);
@@ -2127,10 +2076,9 @@ select {
   margin-bottom:13px;
 }
 .library-banner h2 {
-  font-family:var(--display-face);
-  font-weight:650;
+  font-weight:600;
   font-size:24px;
-  letter-spacing:.01em;
+  letter-spacing:-.02em;
   color:var(--ink);
   line-height:1.6;
 }
@@ -2307,11 +2255,10 @@ select {
   margin-bottom:7px;
 }
 .modal-header h2 {
-  font-family:"Noto Serif SC", "SimSun", serif;
   font-weight:600;
   font-size:21px;
   line-height:1.6;
-  letter-spacing:0.5px;
+  letter-spacing:-.02em;
 }
 .modal-header .icon-button {
   align-self:flex-start;
@@ -2348,9 +2295,9 @@ select {
 }
 .calculator-result strong {
   font-family:var(--number-face);
-  font-weight:650;
+  font-weight:700;
   font-size:38px;
-  letter-spacing:1px;
+  letter-spacing:-.03em;
   display:block;
   margin:11px 0;
   color:var(--forest-deep);
@@ -2552,10 +2499,9 @@ select {
   padding-top:4px;
 }
 .about-content h3 {
-  font-family:"Noto Serif SC", "SimSun", serif;
   font-size:27px;
-  font-weight:500;
-  letter-spacing:1.5px;
+  font-weight:600;
+  letter-spacing:-.02em;
   line-height:1.8;
   margin:24px 0 17px;
 }
@@ -2942,15 +2888,6 @@ select {
     font-size:9px;
     padding-inline:7px;
   }
-  .workspace-pill {
-    font-size:8px;
-  }
-  .sidebar-care {
-    padding-inline:13px;
-  }
-  .sidebar-care > div > span {
-    font-size:8px;
-  }
   .visitor strong {
     font-size:10px;
   }
@@ -3238,16 +3175,10 @@ select {
   .sidebar .workspace-label {
     font-size:11px;
   }
-  .sidebar .workspace-pill {
-    font-size:9px;
-  }
   .sidebar .visitor strong {
     font-size:12px;
   }
   .sidebar .visitor small {
-    font-size:9px;
-  }
-  .sidebar .sidebar-care > div > span {
     font-size:9px;
   }
   .sidebar-scrim {
@@ -4433,9 +4364,6 @@ select {
   font-size:12px;
   color:light-dark(#7e9070,#b9cebc);
 }
-.sidebar-care > div > span {
-  font-size:9px;
-}
 .visitor small {
   font-size:9px;
 }
@@ -4711,26 +4639,6 @@ select {
     transform:none;
   }
 }
-.ai-connect-button {
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  border:1px solid light-dark(#cfdcc5,#344a3a);
-  background:light-dark(#eaf1e2,#1e2e24);
-  color:light-dark(#476e35,#dbe9de);
-  border-radius:7px;
-  padding:7px 10px;
-  font-size:11px;
-  font-weight:500;
-  white-space:nowrap;
-}
-.ai-connect-button:hover {
-  background:light-dark(#dfead4,#2b3d2d);
-}
-.ai-connect-button.connected {
-  background:light-dark(#eff4e9,#1e2e24);
-  color:light-dark(#728b60,#b9cebc);
-}
 .ai-chat-banner {
   display:flex;
   gap:12px;
@@ -4878,7 +4786,7 @@ select {
   font-size:12px;
 }
 .secret-input input::placeholder {
-  font-family:"Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-family:var(--ui-face);
   font-size:10px;
 }
 .secret-input > button {
@@ -4980,14 +4888,6 @@ select {
   }
 }
 @media (max-width: 580px) {
-  .ai-connect-button {
-    font-size:10px;
-    padding:6px 8px;
-    gap:4px;
-  }
-  .ai-connect-button > svg {
-    width:13px;
-  }
   .topbar-actions {
     gap:7px;
   }
