@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#F2FBF9" />
+    <meta name="theme-color" content="#F6F8F4" />
     <script>
       try {
         const theme = localStorage.getItem('guardian:theme:v1');
         const dark = theme === 'dark' || (theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
         document.documentElement.dataset.theme = dark ? 'dark' : 'light';
         document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
-        if (dark) document.querySelector('meta[name="theme-color"]').content = '#10201E';
+        if (dark) document.querySelector('meta[name="theme-color"]').content = '#18211C';
       } catch (_) { document.documentElement.style.colorScheme = 'light'; }
     </script>
     <meta
@@ -21,12 +21,6 @@
     <title>校园智护 · 每一份劳动，都值得被守护</title>
   </head>
   <body>
-    <div class="ambient-mesh" aria-hidden="true">
-      <span class="ambient-emerald"></span>
-      <span class="ambient-sky"></span>
-      <span class="ambient-mint"></span>
-      <span class="ambient-wash"></span>
-    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

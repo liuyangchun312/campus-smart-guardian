@@ -5,6 +5,7 @@ import type { Inspection } from "../lib/safety";
 import { localDateKey, pendingTasks, summarizeOperations } from "../lib/operations";
 import { useDeployment } from "../lib/deployment";
 import { formatDate } from "../lib/storage";
+import WindowDots from "./WindowDots";
 import "./workbench.css";
 
 type Props = {
@@ -50,7 +51,7 @@ export default function Home({ name, navigate, openRecord, ask, openTool, orders
     <div className="workbench-home">
       <header className="wb-heading">
         <div className="wb-window-bar">
-          <span className="wb-window-dots" aria-hidden="true"><i /><i /><i /></span>
+          <WindowDots />
           <span className="wb-window-label">校园智护 · 工作台</span>
           <time className="wb-date" dateTime={localDateKey(now)}>
             <CalendarDays size={14} aria-hidden="true" />

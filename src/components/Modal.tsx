@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
+import WindowDots from "./WindowDots";
 
 export default function Modal({
   title,
@@ -49,8 +50,8 @@ export default function Modal({
       aria-labelledby="modal-title"
     >
       <header className="modal-header">
-        <div>
-          <span className="eyebrow">校园智护 · 实用服务</span>
+        <div className="modal-title-group">
+          <WindowDots />
           <h2 id="modal-title">{title}</h2>
         </div>
         <button className="icon-button" onClick={onClose} aria-label="关闭弹窗">

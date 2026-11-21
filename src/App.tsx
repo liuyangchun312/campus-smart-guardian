@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import Home from "./components/Home";
+import WindowDots from "./components/WindowDots";
 import Tools from "./components/Tools";
 import AiSettings from "./components/AiSettings";
 import SessionGate from "./components/SessionGate";
@@ -529,7 +530,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
   );
 
   return (
-    <div className="app-shell" data-page={page}>
+    <div className="app-shell">
       <a
         className="skip-link"
         href="#main-content"
@@ -643,6 +644,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
             >
               <Menu size={22} />
             </button>
+            {page !== "home" && <WindowDots />}
             <span>工作台</span>
             <ChevronRight size={13} />
             <strong>{navItems.find((item) => item.id === page)?.label}</strong>
@@ -654,6 +656,7 @@ function WorkspaceApp({ user, initial, onExit }: { user: Account; initial: Works
                 className={`ai-connect-button ${aiEnabled ? "connected" : ""}`}
                 onClick={openAiSettings}
                 aria-label={aiEnabled ? "AI 已启用，打开 AI 连接设置" : "打开 AI 连接设置"}
+                title={aiEnabled ? "AI 已启用，打开 AI 连接设置" : "打开 AI 连接设置"}
               >
                 {aiIndicator}
               </button>
