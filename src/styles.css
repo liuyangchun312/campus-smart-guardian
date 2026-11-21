@@ -1,11 +1,62 @@
+@font-face {
+  font-family: "Campus System Kai";
+  src: local("KaiTi"), local("Kaiti SC Regular"), local("STKaitiSC-Regular"), local("STKaiti");
+  font-display: swap;
+}
+
+/* LXGW WenKai GB Screen 1.530, distributed under OFL 1.1. */
+@font-face {
+  font-family: "Campus WenKai";
+  src: url("./assets/fonts/wenkai-common.woff2") format("woff2");
+  font-display: swap;
+}
+
+/* Login and workbench text can use the smaller subset on its own. */
+@font-face {
+  font-family: "Campus WenKai";
+  src: url("./assets/fonts/wenkai-interface.woff2") format("woff2");
+  font-display: swap;
+  unicode-range:
+    U+20-7E, U+B7, U+2013, U+201C-201D, U+2026, U+3001-3002, U+3010-3011, U+4E00, U+4E0A-4E0B,
+    U+4E0D-4E0E, U+4E1A, U+4E22, U+4E24-4E25, U+4E2A, U+4E2D, U+4E3A-4E3B, U+4E88, U+4E8B, U+4E8E,
+    U+4E91, U+4EA4, U+4EBA, U+4ECD-4ECE, U+4ED6, U+4EFD, U+4F18, U+4F4D, U+4F53, U+4F55, U+4F5C,
+    U+4F7F, U+4F8B, U+4F9B, U+4F9D, U+4FBF, U+4FDD, U+4FEE, U+5148, U+5165, U+5168, U+5173,
+    U+5176-5177, U+5185, U+518C-518D, U+51B3, U+51FA-51FB, U+5206-5207, U+5212, U+521B, U+521D, U+5220,
+    U+522B, U+5230, U+5236, U+524D, U+529E, U+52A0-52A1, U+52A8-52A9, U+52B3, U+52E4, U+5316, U+533A,
+    U+5355, U+5373, U+539F, U+53CD, U+53D1, U+53D6-53D7, U+53E3, U+53E6, U+53EF-53F0, U+53F7, U+5408,
+    U+540C-540E, U+5417, U+542F, U+5458, U+548C, U+54A8, U+54CD, U+5668, U+56DE, U+56ED, U+5728,
+    U+5730, U+573A, U+578B, U+5883, U+5904, U+5907, U+590D, U+5916, U+5927, U+5931, U+597D, U+5982,
+    U+59CB, U+59D3, U+5B57-5B58, U+5B66, U+5B89, U+5B8C, U+5B98, U+5B9A, U+5B9E, U+5BB6, U+5BB9,
+    U+5BC6, U+5BF9, U+5BFC, U+5C06, U+5C0A, U+5C0F, U+5C11, U+5C1A, U+5DE1, U+5DE5, U+5DF2, U+5E2E,
+    U+5E38, U+5E76, U+5E93-5E94, U+5EA6, U+5EFA, U+5F00, U+5F03, U+5F0F, U+5F15, U+5F20, U+5F52-5F53,
+    U+5F55, U+5F85, U+5FAA, U+5FD9, U+5FEB, U+6001, U+6025, U+603B, U+60A8, U+6210-6211, U+6216,
+    U+6237, U+6253, U+6280, U+62A4-62A5, U+6307, U+6362, U+636E, U+6388, U+63A5, U+63A7, U+63D0,
+    U+64CD, U+6539, U+6548, U+6570, U+6574, U+6587, U+6599, U+65B0, U+65B9, U+65E0, U+65E7, U+65F6,
+    U+6635, U+663E, U+666E-666F, U+667A, U+6682, U+6700, U+6709, U+670D, U+671F, U+672A, U+672C,
+    U+673A, U+6743, U+6761, U+677F, U+67E5, U+6821, U+6838, U+683C, U+6863, U+68C0, U+6A21, U+6B21,
+    U+6B63-6B65, U+6BCD, U+6C42, U+6CA1, U+6CD5, U+6CE8, U+6D45, U+6D4F, U+6DF1, U+6E05, U+6E20,
+    U+6E29, U+6F14, U+70B9, U+7248, U+7279, U+72B6, U+732E, U+73AF, U+73ED, U+7406, U+751F, U+7528,
+    U+7531, U+7559, U+767B, U+7684, U+76CA, U+76EE, U+770B, U+7801, U+786E, U+793A, U+79C1, U+79D1,
+    U+79F0, U+7A0B, U+7A0D, U+7A3F, U+7A7A, U+7A97, U+7AD9, U+7AEF, U+7B26, U+7B2C, U+7B49, U+7B54,
+    U+7B97, U+7BA1, U+7CFB, U+7D22, U+7D27, U+7E41, U+7EA6, U+7EBF, U+7EC4, U+7EC7, U+7ED9, U+7EDC,
+    U+7EDF, U+7EE7, U+7EED, U+7EF4, U+7F51, U+7F6E, U+7F72, U+8005, U+8054, U+80FD, U+81EA,
+    U+81F3-81F4, U+822A, U+8272, U+8349, U+83DC, U+85CF, U+884C, U+8981, U+89C2, U+89C8, U+89E3,
+    U+8BA1, U+8BA4, U+8BB0, U+8BBE, U+8BC1, U+8BC6, U+8BD5, U+8BDD, U+8BE2, U+8BE5, U+8BF7, U+8BFB,
+    U+8BFE, U+8D25-8D26, U+8D39, U+8D44, U+8D85, U+8DDF, U+8DF3, U+8EAB, U+8F7D, U+8F93, U+8FBE,
+    U+8FD0-8FD1, U+8FD4, U+8FD8-8FD9, U+8FDB, U+8FDE, U+9000-9001, U+9009, U+901A, U+901F, U+903E,
+    U+9053, U+90E8, U+914D, U+916C, U+9192, U+91CD, U+91CF, U+95ED-95EE, U+95F4, U+9605, U+9650,
+    U+9664, U+968F-9690, U+969C, U+96C6, U+9700, U+975E, U+9762, U+9875, U+9879, U+9898, U+9988,
+    U+9996, U+9A8C, U+FF0C, U+FF1A-FF1B, U+FF1F;
+}
+
 :root {
-  --ui-face: "Plus Jakarta Sans", "HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --ui-face: "Campus System Kai", "Campus WenKai", KaiTi, "Kaiti SC", STKaiti, "PingFang SC", "Microsoft YaHei", sans-serif;
   font-family:var(--ui-face);
   font-weight:400;
   font-variant-numeric:tabular-nums;
   color:var(--ink);
   background:var(--canvas);
-  font-synthesis:none;
+  font-synthesis:weight;
   text-rendering:optimizeLegibility;
   -webkit-font-smoothing:antialiased;
   font-size:14px;

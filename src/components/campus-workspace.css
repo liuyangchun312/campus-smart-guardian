@@ -32,7 +32,7 @@
   --side-width: clamp(210px, 16.2vw, 248px);
   --page-gutter: clamp(18px, 2.6vw, 44px);
   --display-face: var(--ui-face);
-  --number-face: var(--ui-face);
+  --number-face: system-ui, sans-serif;
   --glass-fill: var(--paper);
   --sidebar-fill: var(--paper);
   --glass-filter: none;
